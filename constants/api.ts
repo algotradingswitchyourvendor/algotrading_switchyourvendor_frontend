@@ -2,7 +2,7 @@
 
 export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "/api/v1";
 export const WS_BASE_URL =
-  process.env.NEXT_PUBLIC_WS_URL || `ws://${typeof window !== "undefined" ? window.location.host : "localhost:8000"}/api/v1/ws`;
+  process.env.NEXT_PUBLIC_WS_URL || `wss://${typeof window !== "undefined" ? window.location.host : "localhost:8000"}/api/v1/ws`;
 
 export const ENDPOINTS = {
   DASHBOARD: `${API_BASE_URL}/dashboard`,

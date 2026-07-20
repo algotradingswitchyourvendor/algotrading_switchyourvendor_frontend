@@ -113,7 +113,7 @@ npm run start
 | Variable | Description |
 | :--- | :--- |
 | `NEXT_PUBLIC_API_URL` | The base URL for the backend API. Exposed to the client. Defaults to `/api/v1` in dev to use rewrites. |
-| `NEXT_PUBLIC_WS_URL` | The WebSocket URL for live data streaming. Exposed to the client. Defaults to `ws://localhost:8000/api/v1/ws`. |
+| `NEXT_PUBLIC_WS_URL` | The WebSocket URL for live data streaming. Exposed to the client. Defaults to `wss://localhost:8000/api/v1/ws`. |
 | `BACKEND_URL` | Used by the Next.js API proxy (`next.config.ts`) to route `/api/*` calls. Avoids CORS issues. Defaults to `http://127.0.0.1:8000`. |
 
 ---
