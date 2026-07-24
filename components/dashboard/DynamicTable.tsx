@@ -44,10 +44,13 @@ import { CSS } from "@dnd-kit/utilities";
 
 /* ── Cell Renderer ────────────────────────────────────────────── */
 
+let cellRendererCount = 0;
+
 function renderCell(
   value: unknown,
   meta: ColumnMetadata | undefined
 ): React.ReactNode {
+  cellRendererCount++;
   if (value === null || value === undefined)
     return <span style={{ color: "var(--text-muted)" }}>—</span>;
 
@@ -145,15 +148,19 @@ function SortIcon({ isSorted }: { isSorted: false | "asc" | "desc" }) {
 }
 
 /* ── Memoized Table Row ───────────────────────────────────────── */
-// This prevents unnecessary re-renders when WebSocket ticks happen
-// since Zustand maps unchanged rows to the same object reference.
+// Prevents unnecessary re-renders for WebSocket delta ticks (unchanged rows
+// keep the same object reference in Zustand). Also re-renders when the column
+// configuration changes (toggle, reorder, pin) because TanStack recreates the
+// Row object and its visible cells array in those cases.
 const MemoizedTableRow = React.memo(
   ({
     row,
     metaMap,
+    columnOrder,
   }: {
     row: Row<StockRecord>;
     metaMap: Map<string, ColumnMetadata>;
+    columnOrder: string[];
   }) => {
     return (
       <tr>
@@ -184,7 +191,20 @@ const MemoizedTableRow = React.memo(
       </tr>
     );
   },
-  (prev, next) => prev.row.original === next.row.original
+  (prev, next) => {
+    if (prev.columnOrder !== next.columnOrder) return false;
+    // Re-render if the underlying data changed (WebSocket delta)
+    if (prev.row.original !== next.row.original) return false;
+    // Re-render if visible columns changed (toggle, reorder, pin)
+    const prevCells = prev.row.getVisibleCells();
+    const nextCells = next.row.getVisibleCells();
+    if (prevCells.length !== nextCells.length) return false;
+    // Check column identity — if column IDs differ, columns were reordered
+    for (let i = 0; i < prevCells.length; i++) {
+      if (prevCells[i].column.id !== nextCells[i].column.id) return false;
+    }
+    return true;
+  }
 );
 
 /* ── Draggable Header ─────────────────────────────────────────── */
@@ -243,6 +263,11 @@ interface DynamicTableProps {
     pageIndex: number;
     pageSize: number;
   };
+  columnsOverride?: string[];
+  metadataOverride?: ColumnMetadata[];
+  columnOrderOverride?: string[];
+  pinnedColumnsOverride?: { left: string[]; right: string[] };
+  onColumnOrderChange?: (order: string[]) => void;
 }
 
 export interface DynamicTableRef {
@@ -250,14 +275,14 @@ export interface DynamicTableRef {
 }
 
 export const DynamicTable = forwardRef<DynamicTableRef, DynamicTableProps>(
-  ({ data, globalFilter, pagination }, ref) => {
-    const {
-      metadata,
-      visibleColumns,
-      columnOrder,
-      pinnedColumns,
-      setColumnOrder,
-    } = useColumnStore();
+  ({ data, globalFilter, pagination, columnsOverride, metadataOverride, columnOrderOverride, pinnedColumnsOverride, onColumnOrderChange }, ref) => {
+    const store = useColumnStore();
+    
+    const metadata = metadataOverride || store.metadata;
+    const visibleColumns = columnsOverride || store.visibleColumns;
+    const columnOrder = columnOrderOverride || store.columnOrder;
+    const pinnedColumns = pinnedColumnsOverride || store.pinnedColumns;
+    const setColumnOrder = onColumnOrderChange || store.setColumnOrder;
     const [sorting, setSorting] = useState<SortingState>([]);
 
     const metaMap = useMemo(() => {
@@ -265,6 +290,9 @@ export const DynamicTable = forwardRef<DynamicTableRef, DynamicTableProps>(
       metadata.forEach((m) => map.set(m.column, m));
       return map;
     }, [metadata]);
+
+    console.log("DEBUG [Table]: Rows received from API:", data.length);
+    console.log("DEBUG [Table]: Visible columns:", visibleColumns);
 
     const columns = useMemo<ColumnDef<StockRecord>[]>(() => {
       return visibleColumns
@@ -324,6 +352,9 @@ export const DynamicTable = forwardRef<DynamicTableRef, DynamicTableProps>(
         .filter(Boolean);
     }, [visibleColumns, metaMap]);
 
+    console.log("DEBUG [Table]: Column IDs:", columns.map(c => c.id));
+    console.log("DEBUG [Table]: Accessor keys (IDs):", columns.map(c => c.id));
+
     const table = useReactTable({
       data,
       columns,
@@ -358,6 +389,9 @@ export const DynamicTable = forwardRef<DynamicTableRef, DynamicTableProps>(
         );
       },
     });
+
+    console.log("DEBUG [Table]: Row model length:", table.getRowModel().rows.length);
+    let renderedRowCount = 0;
 
     useImperativeHandle(ref, () => ({
       downloadCSV: (filename: string) => {
@@ -452,13 +486,17 @@ export const DynamicTable = forwardRef<DynamicTableRef, DynamicTableProps>(
                   </td>
                 </tr>
               ) : (
-                table.getRowModel().rows.map((row) => (
-                  <MemoizedTableRow
-                    key={row.id}
-                    row={row}
-                    metaMap={metaMap}
-                  />
-                ))
+                table.getRowModel().rows.map((row) => {
+                  renderedRowCount++;
+                  return (
+                    <MemoizedTableRow
+                      key={row.id}
+                      row={row}
+                      metaMap={metaMap}
+                      columnOrder={columnOrder}
+                    />
+                  );
+                })
               )}
             </tbody>
           </table>

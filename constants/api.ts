@@ -16,6 +16,7 @@ export const ENDPOINTS = {
   MARKET_STATUS: `${API_BASE_URL}/market-status`,
   INDICES: `${API_BASE_URL}/indices`,
   SCANNER: `${API_BASE_URL}/scanner`,
+  SCANNER_QUERY: `${API_BASE_URL}/scanner/query`,
   SCANNER_PRESETS: `${API_BASE_URL}/scanner/presets`,
   HEALTH: `${API_BASE_URL}/health`,
 } as const;

@@ -42,6 +42,7 @@ import {
   Radio,
   Square,
   Sparkles,
+  AlertTriangle,
 } from "lucide-react";
 
 /* ── Operators ───────────────────────────────────────────────── */
@@ -405,7 +406,7 @@ const DEFAULT_CONDITION: ScannerCondition = {
   logical: "AND",
 };
 
-export default function ScannerPage() {
+export default function ScannerLTDPage() {
   const { metadata, pageSize } = useColumnStore();
   const [conditions, setConditions] = useState<ScannerCondition[]>([
     { ...DEFAULT_CONDITION },
@@ -435,7 +436,7 @@ export default function ScannerPage() {
 
   // Use the store's sendMessage to send WS subscription messages
   // without creating a second WebSocket connection
-  const { sendMessage } = useWebSocketStore();
+  const sendMessage = (msg: any) => {};
 
   const handleDownloadCSV = () => {
     tableRef.current?.downloadCSV(
@@ -458,7 +459,7 @@ export default function ScannerPage() {
   const scanMutation = useMutation({
     mutationFn: async (request: ScannerRequest) => {
       const res = await runScanner(request);
-      return { data: res.data || [], meta: (res as any).meta, request };
+      return { data: res.data || [], meta: (res as any).meta };
     },
     onSuccess: (result) => {
       const totalScanned = result.meta?.total || result.data.length;
@@ -478,14 +479,12 @@ export default function ScannerPage() {
         setLive(true);
         sendMessage({
           type: "subscribe_scanner",
-          request: {
-            execution_target: "live",
-            conditions: validConditions,
-            sort_by: result.request.sort_by,
-            sort_order: result.request.sort_order,
-            page: result.request.page,
-            page_size: result.request.page_size,
-          },
+          conditions: validConditions.map((c) => ({
+            column: c.column,
+            operator: c.operator,
+            value: c.value,
+            logical: c.logical,
+          })),
         });
       }
     },
@@ -530,12 +529,12 @@ export default function ScannerPage() {
     if (!valid.length) return;
     setLoading(true);
     scanMutation.mutate({
-      mode: "live",
+      mode: "historical", date: new Date().toISOString().split("T")[0],
       conditions: valid,
       sort_by: "day_change_pct",
       sort_order: "desc",
       page: 1,
-      page_size: 10000, // No artificial limit — return all matching records
+      page_size: 5000, // No artificial limit — return all matching records
     });
   };
 
@@ -543,12 +542,12 @@ export default function ScannerPage() {
     setConditions(preset.conditions);
     setLoading(true);
     scanMutation.mutate({
-      mode: "live",
+      mode: "historical", date: new Date().toISOString().split("T")[0],
       conditions: preset.conditions,
       sort_by: "day_change_pct",
       sort_order: "desc",
       page: 1,
-      page_size: 10000,
+      page_size: 5000,
     });
   };
 
@@ -570,7 +569,7 @@ export default function ScannerPage() {
     mutationFn: async (request: import("@/types/scanner").UnifiedQueryRequest) => {
       const { runQuery } = await import("@/services/data");
       const res = await runQuery(request);
-      return { data: res.data || [], meta: (res as any).meta, request };
+      return { data: res.data || [], meta: (res as any).meta };
     },
     onSuccess: (result) => {
       setResults(result.data, result.meta || {
@@ -582,14 +581,6 @@ export default function ScannerPage() {
         conditions_applied: 0,
       });
       setCurrentPage(1);
-      
-      if (result.request.execution_target === "live") {
-        setLive(true);
-        sendMessage({
-          type: "subscribe_scanner",
-          request: result.request,
-        });
-      }
     },
   });
 
@@ -608,7 +599,7 @@ export default function ScannerPage() {
 
   return (
     <div style={{ display: "flex", flexDirection: "column" }}>
-      <TopNavigation title="Market Scanner MoM" />
+      <TopNavigation title="Life Till Day Scanner" />
 
       {/* Query Builder Modal */}
       <QueryBuilder
@@ -768,6 +759,26 @@ export default function ScannerPage() {
           <FilterChips conditions={conditions} onRemove={removeCondition} />
 
           {/* Results */}
+          {hasRun && meta?.truncated && (
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "var(--sp-2)",
+                padding: "var(--sp-3)",
+                backgroundColor: "rgba(255,165,0,0.1)",
+                border: "1px solid rgba(255,165,0,0.3)",
+                borderRadius: "var(--radius-sm)",
+                color: "#d97706",
+                fontSize: 12,
+                fontWeight: 500,
+              }}
+            >
+              <AlertTriangle size={14} />
+              Showing first 5,000 matching records. Please refine your query for more specific results.
+            </div>
+          )}
+
           {hasRun && results.length > 0 && (
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <ScanSummary

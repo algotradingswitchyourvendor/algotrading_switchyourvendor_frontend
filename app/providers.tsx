@@ -10,7 +10,7 @@ export function Providers({ children }: { children: ReactNode }) {
         defaultOptions: {
           queries: {
             refetchOnWindowFocus: false,
-            retry: 2,
+            retry: 0, // Retries are handled by api.ts with exponential backoff
             staleTime: 30_000,
           },
         },

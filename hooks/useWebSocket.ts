@@ -5,6 +5,7 @@
  * - Automatic connection on mount
  * - Exponential backoff reconnection
  * - Delta update integration with market store
+ * - Scanner live update integration
  * - Heartbeat handling
  * - Clean disconnect on unmount
  */
@@ -14,6 +15,7 @@
 import { useEffect, useRef, useCallback } from "react";
 import { useMarketStore } from "@/stores/market";
 import { useWebSocketStore } from "@/stores/websocket";
+import { useScannerStore } from "@/stores/scanner";
 import { WS_RECONNECT } from "@/constants/market";
 import type { StockRecord } from "@/types/stock";
 
@@ -25,6 +27,14 @@ const WS_URL =
 interface WSMessage {
   type: string;
   changed_rows?: StockRecord[];
+  data?: StockRecord[];
+  meta?: {
+    total: number;
+    page: number;
+    page_size: number;
+    total_pages: number;
+    conditions_applied: number;
+  };
   snapshot_id?: number;
   total_instruments?: number;
   market_status?: string;
@@ -35,9 +45,10 @@ export function useWebSocket() {
   const socketRef = useRef<WebSocket | null>(null);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const { setStatus, incrementReconnect, resetReconnect, reconnectAttempts } =
+  const { setStatus, setSocket, incrementReconnect, resetReconnect, reconnectAttempts } =
     useWebSocketStore();
-  const { applyDelta, setMarketStatus: setMarketStatusInStore } = useMarketStore();
+  const { applyDelta, setMarketStatus: setMarketStatusInStore, setIndices } = useMarketStore();
+  const { updateFromWebSocket, isLive: scannerIsLive } = useScannerStore();
 
   const connect = useCallback(() => {
     if (typeof window === "undefined" || !WS_URL) return;
@@ -54,6 +65,7 @@ export function useWebSocket() {
 
     const ws = new WebSocket(WS_URL);
     socketRef.current = ws;
+    setSocket(ws);
 
     ws.onopen = () => {
       setStatus("connected");
@@ -72,6 +84,20 @@ export function useWebSocket() {
           case "snapshot_update":
             if (msg.changed_rows?.length) {
               applyDelta(msg.changed_rows);
+            }
+            break;
+
+          case "scanner_update":
+            // Live scanner results pushed by backend on each snapshot
+            if (msg.data && msg.meta) {
+              updateFromWebSocket(msg.data, msg.meta);
+            }
+            break;
+
+          case "index_update":
+            // Live index values (NIFTY, SENSEX, etc.) from background poller
+            if (msg.data && Array.isArray(msg.data)) {
+              setIndices(msg.data as any);
             }
             break;
 
@@ -101,9 +127,10 @@ export function useWebSocket() {
     ws.onclose = () => {
       setStatus("disconnected");
       socketRef.current = null;
+      setSocket(null);
       scheduleReconnect();
     };
-  }, [setStatus, resetReconnect, applyDelta, setMarketStatusInStore]);
+  }, [setStatus, setSocket, resetReconnect, applyDelta, setMarketStatusInStore, updateFromWebSocket]);
 
   const scheduleReconnect = useCallback(() => {
     const delay = Math.min(
@@ -125,8 +152,9 @@ export function useWebSocket() {
       socketRef.current.close();
       socketRef.current = null;
     }
+    setSocket(null);
     setStatus("disconnected");
-  }, [setStatus]);
+  }, [setStatus, setSocket]);
 
   const sendMessage = useCallback((data: Record<string, unknown>) => {
     if (socketRef.current?.readyState === WebSocket.OPEN) {

@@ -1,8 +1,56 @@
 export interface ScannerCondition {
   column: string;
   operator: string;
-  value: string | number | boolean | (string | number)[];
+  value: string | number | boolean | (string | number)[] | null;
   logical: "AND" | "OR";
+}
+
+export interface ScannerGroup {
+  conditions: ScannerCondition[];
+  logical: "AND" | "OR";
+}
+
+export interface UnifiedQueryRequest {
+  conditions?: ScannerCondition[];
+  groups?: ScannerGroup[];
+  query_text?: string;
+  
+  execution_target: "live" | "history";
+  
+  date?: string;
+  start_time?: string;
+  end_time?: string;
+  
+  sort_by?: string;
+  sort_order?: "asc" | "desc";
+  
+  page?: number;
+  page_size?: number;
+  
+  query_name?: string;
+  query_id?: string;
+}
+
+export interface QueryValidationError {
+  field: string;
+  code: string;
+  message: string;
+  suggestion?: string;
+}
+
+export interface QueryResultMeta {
+  total: number;
+  total_scanned: number;
+  matched_count: number;
+  returned_count: number;
+  truncated: boolean;
+  page: number;
+  page_size: number;
+  total_pages: number;
+  conditions_applied: number;
+  execution_time_ms: number;
+  execution_target: string;
+  validation_errors: QueryValidationError[];
 }
 
 export interface ScannerRequest {

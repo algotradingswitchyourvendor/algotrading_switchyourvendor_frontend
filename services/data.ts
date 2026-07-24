@@ -6,7 +6,7 @@ import { api } from "./api";
 import { ENDPOINTS } from "@/constants/api";
 import type { DashboardData, StockRecord, IndexData, MarketStatusData, HealthData } from "@/types/stock";
 import type { MetadataResponse } from "@/types/metadata";
-import type { ScannerRequest, ScannerPreset } from "@/types/scanner";
+import type { ScannerRequest, ScannerPreset, UnifiedQueryRequest } from "@/types/scanner";
 import type { ApiResponse, PaginationMeta } from "@/types/api";
 
 // ── Dashboard ──────────────────────────────────────────────────────────
@@ -82,7 +82,10 @@ export async function fetchHistory(params: HistoryParams = {}) {
   if (params.page) queryParams.page = String(params.page);
   if (params.page_size) queryParams.page_size = String(params.page_size);
 
-  return api.get<StockRecord[]>(ENDPOINTS.HISTORY, queryParams);
+  return api.get<StockRecord[]>(ENDPOINTS.HISTORY, queryParams, {
+    timeout: 120000, // 2 minutes for large parquet downloads
+    retries: 3,
+  });
 }
 
 export async function fetchAvailableDates(): Promise<ApiResponse<string[]>> {
@@ -96,6 +99,10 @@ export async function fetchTimeline(symbol: string, date?: string) {
 }
 
 // ── Scanner ────────────────────────────────────────────────────────────
+
+export async function runQuery(request: UnifiedQueryRequest) {
+  return api.post<StockRecord[]>(ENDPOINTS.SCANNER_QUERY, request);
+}
 
 export async function runScanner(request: ScannerRequest) {
   return api.post<StockRecord[]>(ENDPOINTS.SCANNER, request);
