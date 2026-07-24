@@ -58,9 +58,6 @@ export async function fetchMarketStatus(): Promise<ApiResponse<MarketStatusData>
   return api.get<MarketStatusData>(ENDPOINTS.MARKET_STATUS);
 }
 
-export async function fetchIndices(): Promise<ApiResponse<IndexData[]>> {
-  return api.get<IndexData[]>(ENDPOINTS.INDICES);
-}
 
 // ── History ────────────────────────────────────────────────────────────
 

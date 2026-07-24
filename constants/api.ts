@@ -14,7 +14,6 @@ export const ENDPOINTS = {
   METADATA: `${API_BASE_URL}/metadata`,
   COLUMNS: `${API_BASE_URL}/columns`,
   MARKET_STATUS: `${API_BASE_URL}/market-status`,
-  INDICES: `${API_BASE_URL}/indices`,
   SCANNER: `${API_BASE_URL}/scanner`,
   SCANNER_QUERY: `${API_BASE_URL}/scanner/query`,
   SCANNER_PRESETS: `${API_BASE_URL}/scanner/presets`,

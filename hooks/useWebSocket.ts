@@ -47,7 +47,7 @@ export function useWebSocket() {
 
   const { setStatus, setSocket, incrementReconnect, resetReconnect, reconnectAttempts } =
     useWebSocketStore();
-  const { applyDelta, setMarketStatus: setMarketStatusInStore, setIndices } = useMarketStore();
+  const { applyDelta, setMarketStatus: setMarketStatusInStore } = useMarketStore();
   const { updateFromWebSocket, isLive: scannerIsLive } = useScannerStore();
 
   const connect = useCallback(() => {
@@ -94,12 +94,7 @@ export function useWebSocket() {
             }
             break;
 
-          case "index_update":
-            // Live index values (NIFTY, SENSEX, etc.) from background poller
-            if (msg.data && Array.isArray(msg.data)) {
-              setIndices(msg.data as any);
-            }
-            break;
+
 
           case "market_closed":
             // Could update market status in store
