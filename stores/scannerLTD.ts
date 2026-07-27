@@ -19,8 +19,6 @@ interface ScannerMeta {
   total_pages: number;
   conditions_applied: number;
   truncated?: boolean;
-  bullish_count?: number;
-  bearish_count?: number;
 }
 
 interface ScannerState {
@@ -49,7 +47,7 @@ interface ScannerState {
   reset: () => void;
 }
 
-export const useScannerStore = create<ScannerState>((set) => ({
+export const useScannerLTDStore = create<ScannerState>((set) => ({
   results: [],
   meta: null,
   activeConditions: [],

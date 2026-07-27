@@ -21,7 +21,7 @@ import type { StockRecord } from "@/types/stock";
 
 const WS_URL =
   typeof window !== "undefined"
-    ? `wss://${window.location.hostname}:8000/api/v1/ws`
+    ? `ws://${window.location.hostname}:8000/api/v1/ws`
     : "";
 
 interface WSMessage {
@@ -45,7 +45,7 @@ export function useWebSocket() {
   const socketRef = useRef<WebSocket | null>(null);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const { setStatus, setSocket, incrementReconnect, resetReconnect, reconnectAttempts } =
+  const { setStatus, setSocket, incrementReconnect, resetReconnect, reconnectAttempts, flushQueue } =
     useWebSocketStore();
   const { applyDelta, setMarketStatus: setMarketStatusInStore } = useMarketStore();
   const { updateFromWebSocket, isLive: scannerIsLive } = useScannerStore();
@@ -70,6 +70,7 @@ export function useWebSocket() {
     ws.onopen = () => {
       setStatus("connected");
       resetReconnect();
+      flushQueue();
     };
 
     ws.onmessage = (event) => {
@@ -125,7 +126,7 @@ export function useWebSocket() {
       setSocket(null);
       scheduleReconnect();
     };
-  }, [setStatus, setSocket, resetReconnect, applyDelta, setMarketStatusInStore, updateFromWebSocket]);
+  }, [setStatus, setSocket, resetReconnect, flushQueue, applyDelta, setMarketStatusInStore, updateFromWebSocket]);
 
   const scheduleReconnect = useCallback(() => {
     const delay = Math.min(

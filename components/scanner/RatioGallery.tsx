@@ -14,10 +14,12 @@ import { Search, ChevronDown, ChevronRight } from "lucide-react";
 
 interface RatioGalleryProps {
   onSelect: (columnName: string) => void;
+  storeHook?: typeof useColumnStore;
 }
 
-export function RatioGallery({ onSelect }: RatioGalleryProps) {
-  const { metadata } = useColumnStore();
+export function RatioGallery({ onSelect, storeHook }: RatioGalleryProps) {
+  const useStore = storeHook || useColumnStore;
+  const { metadata } = useStore();
   const [search, setSearch] = useState("");
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
 
