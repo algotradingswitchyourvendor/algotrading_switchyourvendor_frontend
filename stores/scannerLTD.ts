@@ -14,6 +14,7 @@ import type { ScannerCondition } from "@/types/scanner";
 interface ScannerMeta {
   total: number;
   total_scanned?: number;
+  matched_count?: number;
   page: number;
   page_size: number;
   total_pages: number;
