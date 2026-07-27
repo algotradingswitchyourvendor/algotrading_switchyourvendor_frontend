@@ -174,7 +174,7 @@ const MemoizedTableRow = React.memo(
               style={{
                 textAlign:
                   metaMap.get(cell.column.id)?.type === "number" &&
-                  cell.column.id !== "Instrument"
+                    cell.column.id !== "Instrument"
                     ? "right"
                     : "left",
                 position: isPinned ? "sticky" : "relative",
@@ -237,8 +237,8 @@ function DraggableHeader({
     boxShadow: isLastLeftPinned
       ? "4px 0 8px -4px rgba(0,0,0,0.1)"
       : isDragging
-      ? "0 4px 12px rgba(0,0,0,0.15)"
-      : undefined,
+        ? "0 4px 12px rgba(0,0,0,0.15)"
+        : undefined,
     opacity: isDragging ? 0.8 : 1,
     transform: CSS.Translate.toString(transform),
     transition,
@@ -268,6 +268,7 @@ interface DynamicTableProps {
   columnOrderOverride?: string[];
   pinnedColumnsOverride?: { left: string[]; right: string[] };
   onColumnOrderChange?: (order: string[]) => void;
+  storeHook?: typeof useColumnStore;
 }
 
 export interface DynamicTableRef {
@@ -275,9 +276,10 @@ export interface DynamicTableRef {
 }
 
 export const DynamicTable = forwardRef<DynamicTableRef, DynamicTableProps>(
-  ({ data, globalFilter, pagination, columnsOverride, metadataOverride, columnOrderOverride, pinnedColumnsOverride, onColumnOrderChange }, ref) => {
-    const store = useColumnStore();
-    
+  ({ data, globalFilter, pagination, columnsOverride, metadataOverride, columnOrderOverride, pinnedColumnsOverride, onColumnOrderChange, storeHook }, ref) => {
+    const useStore = storeHook || useColumnStore;
+    const store = useStore();
+
     const metadata = metadataOverride || store.metadata;
     const visibleColumns = columnsOverride || store.visibleColumns;
     const columnOrder = columnOrderOverride || store.columnOrder;
@@ -308,8 +310,8 @@ export const DynamicTable = forwardRef<DynamicTableRef, DynamicTableProps>(
               colName === "Instrument"
                 ? 200
                 : colName === "trading_symbol"
-                ? 120
-                : 100,
+                  ? 120
+                  : 100,
             header: ({ column: tableCol }) => {
               return (
                 <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
@@ -503,4 +505,4 @@ export const DynamicTable = forwardRef<DynamicTableRef, DynamicTableProps>(
         </DndContext>
       </div>
     );
-})
+  })

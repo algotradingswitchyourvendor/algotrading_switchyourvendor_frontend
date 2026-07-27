@@ -318,12 +318,14 @@ function ScanSummary({
   isLive,
   liveUpdateCount,
   lastUpdated,
+  matchedCount,
 }: {
   results: StockRecord[];
   totalScanned: number;
   isLive: boolean;
   liveUpdateCount: number;
   lastUpdated: Date | null;
+  matchedCount: number;
 }) {
   const bullish = results.filter(
     (s) => typeof s.day_change_pct === "number" && (s.day_change_pct as number) > 0
@@ -347,7 +349,7 @@ function ScanSummary({
           Matched
         </span>
         <span className="font-tabular" style={{ fontSize: 18, fontWeight: 700, color: "var(--color-accent)" }}>
-          {results.length.toLocaleString("en-IN")}
+          {matchedCount.toLocaleString("en-IN")}
         </span>
       </div>
       <div className="card-compact" style={{ minWidth: 120 }}>
@@ -412,6 +414,8 @@ export default function ScannerPage() {
   ]);
   const [currentPage, setCurrentPage] = useState(1);
   const [queryBuilderOpen, setQueryBuilderOpen] = useState(false);
+  const [sorting, setSorting] = useState<import("@tanstack/react-table").SortingState>([{ id: "day_change_pct", desc: true }]);
+  const [activeRequest, setActiveRequest] = useState<any>(null);
   const tableRef = useRef<DynamicTableRef>(null);
 
   // Scanner store for results and live state
@@ -423,6 +427,7 @@ export default function ScannerPage() {
     isLoading: scannerLoading,
     liveUpdateCount,
     lastUpdated,
+    activeConditions,
     setResults,
     setActiveConditions,
     setLive,
@@ -471,25 +476,41 @@ export default function ScannerPage() {
       });
       setCurrentPage(1);
 
-      // Subscribe to live scanner updates via WebSocket
+      // Enable live mode and store the request for the WebSocket effect
       const validConditions = conditions.filter((c) => c.column && c.value !== "");
       if (validConditions.length > 0) {
         setActiveConditions(validConditions);
         setLive(true);
-        sendMessage({
-          type: "subscribe_scanner",
-          request: {
-            execution_target: "live",
-            conditions: validConditions,
-            sort_by: result.request.sort_by,
-            sort_order: result.request.sort_order,
-            page: result.request.page,
-            page_size: result.request.page_size,
-          },
+        setActiveRequest({
+          execution_target: "live",
+          conditions: validConditions,
+          sort_by: result.request.sort_by,
+          sort_order: result.request.sort_order,
+          page: result.request.page,
+          page_size: result.request.page_size,
         });
       }
     },
   });
+
+  const wsStatus = useWebSocketStore((s) => s.status);
+
+  useEffect(() => {
+    console.log("[LIFECYCLE] ScannerPage mounted");
+    return () => {
+      console.log("[LIFECYCLE] ScannerPage unmounted");
+    }
+  }, []);
+
+  // Subscribe if live mode is active when component mounts or reconnects
+  useEffect(() => {
+    if (isLive && activeRequest && wsStatus === "connected") {
+      sendMessage({
+        type: "subscribe_scanner",
+        request: activeRequest,
+      });
+    }
+  }, [isLive, activeRequest, wsStatus, sendMessage]);
 
   const handleConditionChange = useCallback(
     (index: number, field: keyof ScannerCondition, value: string | number) => {
@@ -532,10 +553,10 @@ export default function ScannerPage() {
     scanMutation.mutate({
       mode: "live",
       conditions: valid,
-      sort_by: "day_change_pct",
-      sort_order: "desc",
+      sort_by: sorting[0]?.id || "day_change_pct",
+      sort_order: sorting[0]?.desc ? "desc" : "asc",
       page: 1,
-      page_size: 10000, // No artificial limit — return all matching records
+      page_size: 5000, // Fetch up to the backend limit for local pagination
     });
   };
 
@@ -545,10 +566,10 @@ export default function ScannerPage() {
     scanMutation.mutate({
       mode: "live",
       conditions: preset.conditions,
-      sort_by: "day_change_pct",
-      sort_order: "desc",
+      sort_by: sorting[0]?.id || "day_change_pct",
+      sort_order: sorting[0]?.desc ? "desc" : "asc",
       page: 1,
-      page_size: 10000,
+      page_size: 5000,
     });
   };
 
@@ -559,6 +580,13 @@ export default function ScannerPage() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Trigger runScan when sorting changes if it has run before
+  useEffect(() => {
+    if (hasRun && !isLive) {
+      runScan();
+    }
+  }, [sorting]);
 
   const hasValidConditions = conditions.some(
     (c) => c.column && c.value !== ""
@@ -585,10 +613,7 @@ export default function ScannerPage() {
       
       if (result.request.execution_target === "live") {
         setLive(true);
-        sendMessage({
-          type: "subscribe_scanner",
-          request: result.request,
-        });
+        setActiveRequest(result.request);
       }
     },
   });
@@ -600,7 +625,7 @@ export default function ScannerPage() {
         execution_target: target,
         date: date,
         page: 1,
-        page_size: pageSize,
+        page_size: 5000, // Fetch up to the backend limit for local pagination
       });
     },
     [queryMutation, pageSize]
@@ -776,6 +801,7 @@ export default function ScannerPage() {
                 isLive={isLive}
                 liveUpdateCount={liveUpdateCount}
                 lastUpdated={lastUpdated}
+                matchedCount={meta?.matched_count ?? meta?.total ?? results.length}
               />
               
               <div style={{ display: "flex", alignItems: "center", gap: "var(--sp-3)", flexShrink: 0 }}>
@@ -812,6 +838,9 @@ export default function ScannerPage() {
                   pageIndex: currentPage - 1,
                   pageSize: pageSize,
                 }}
+                sorting={sorting}
+                onSortingChange={setSorting}
+                manualSorting={true}
               />
               <Pagination
                 currentPage={currentPage}

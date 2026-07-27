@@ -14,11 +14,11 @@ import {
   SkeletonTable,
   ErrorState,
 } from "@/components/common/States";
-import { useColumnStore } from "@/stores/columns";
-import { useScannerStore } from "@/stores/scanner";
+import { useColumnLTDStore } from "@/stores/columnsLTD";
+import { useScannerLTDStore } from "@/stores/scannerLTD";
 import { useWebSocketStore } from "@/stores/websocket";
 import { useMarketStore } from "@/stores/market";
-import { fetchScannerPresets, runScanner } from "@/services/data";
+import { fetchScannerPresets, runScanner, fetchAvailableDates, fetchMetadata } from "@/services/data";
 import type {
   ScannerCondition,
   ScannerPreset,
@@ -313,23 +313,35 @@ function FilterChips({
 
 /* ── Summary Cards ───────────────────────────────────────────── */
 
+function formatNumberCompact(num: number): string {
+  if (num < 1000) return num.toString();
+  if (num >= 1000000) {
+    return (num / 1000000).toLocaleString("en-IN", { maximumFractionDigits: 2 }) + "M";
+  }
+  return (num / 1000).toLocaleString("en-IN", { maximumFractionDigits: 2 }) + "K";
+}
+
 function ScanSummary({
   results,
   totalScanned,
+  totalMatched,
   isLive,
   liveUpdateCount,
   lastUpdated,
+  meta,
 }: {
   results: StockRecord[];
   totalScanned: number;
+  totalMatched: number;
   isLive: boolean;
   liveUpdateCount: number;
   lastUpdated: Date | null;
+  meta: any;
 }) {
-  const bullish = results.filter(
+  const bullish = meta?.bullish_count ?? results.filter(
     (s) => typeof s.day_change_pct === "number" && (s.day_change_pct as number) > 0
   ).length;
-  const bearish = results.filter(
+  const bearish = meta?.bearish_count ?? results.filter(
     (s) => typeof s.day_change_pct === "number" && (s.day_change_pct as number) < 0
   ).length;
 
@@ -339,16 +351,16 @@ function ScanSummary({
         <span style={{ fontSize: 10, fontWeight: 500, color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: "0.04em", display: "block", marginBottom: 4 }}>
           Scanned
         </span>
-        <span className="font-tabular" style={{ fontSize: 18, fontWeight: 700, color: "var(--text-primary)" }}>
-          {totalScanned.toLocaleString("en-IN")}
+        <span className="font-tabular" style={{ fontSize: 18, fontWeight: 700, color: "var(--text-primary)" }} title={totalScanned.toLocaleString("en-IN")}>
+          {formatNumberCompact(totalScanned)}
         </span>
       </div>
       <div className="card-compact" style={{ minWidth: 120 }}>
         <span style={{ fontSize: 10, fontWeight: 500, color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: "0.04em", display: "block", marginBottom: 4 }}>
           Matched
         </span>
-        <span className="font-tabular" style={{ fontSize: 18, fontWeight: 700, color: "var(--color-accent)" }}>
-          {results.length.toLocaleString("en-IN")}
+        <span className="font-tabular" style={{ fontSize: 18, fontWeight: 700, color: "var(--color-accent)" }} title={totalMatched.toLocaleString("en-IN")}>
+          {formatNumberCompact(totalMatched)}
         </span>
       </div>
       <div className="card-compact" style={{ minWidth: 120 }}>
@@ -407,13 +419,47 @@ const DEFAULT_CONDITION: ScannerCondition = {
 };
 
 export default function ScannerLTDPage() {
-  const { metadata, pageSize } = useColumnStore();
+  const { metadata, pageSize, setMetadata } = useColumnLTDStore();
   const [conditions, setConditions] = useState<ScannerCondition[]>([
     { ...DEFAULT_CONDITION },
   ]);
   const [currentPage, setCurrentPage] = useState(1);
   const [queryBuilderOpen, setQueryBuilderOpen] = useState(false);
+  const [sorting, setSorting] = useState<import("@tanstack/react-table").SortingState>([{ id: "day_change_pct", desc: true }]);
   const tableRef = useRef<DynamicTableRef>(null);
+
+  const [selectedDate, setSelectedDate] = useState<string>("");
+
+  const datesQuery = useQuery({
+    queryKey: ["history-dates"],
+    queryFn: async () => {
+      const res = await fetchAvailableDates();
+      return res.data || [];
+    },
+  });
+
+  useEffect(() => {
+    if (datesQuery.data && datesQuery.data.length > 0 && !selectedDate) {
+      setSelectedDate(datesQuery.data[0]);
+    }
+  }, [datesQuery.data, selectedDate]);
+
+  const metadataQuery = useQuery({
+    queryKey: ["metadata", "history", selectedDate],
+    queryFn: async () => {
+      if (!selectedDate) return null;
+      const res = await fetchMetadata("history", selectedDate);
+      if (!res.success) throw new Error(res.error?.message);
+      return res.data;
+    },
+    enabled: !!selectedDate,
+  });
+
+  useEffect(() => {
+    if (metadataQuery.data) {
+      setMetadata(metadataQuery.data.columns, metadataQuery.data.groups);
+    }
+  }, [metadataQuery.data, setMetadata]);
 
   // Scanner store for results and live state
   const {
@@ -430,17 +476,17 @@ export default function ScannerLTDPage() {
     setLoading,
     setError,
     reset: resetScanner,
-  } = useScannerStore();
+  } = useScannerLTDStore();
 
   const { stocks } = useMarketStore();
 
   // Use the store's sendMessage to send WS subscription messages
   // without creating a second WebSocket connection
-  const sendMessage = (msg: any) => {};
+  const sendMessage = (msg: any) => { };
 
   const handleDownloadCSV = () => {
     tableRef.current?.downloadCSV(
-      `marketpulse_scan_${new Date().toISOString().split("T")[0]}.csv`
+      `marketpulse_scan_${selectedDate || new Date().toISOString().split("T")[0]}.csv`
     );
   };
 
@@ -456,12 +502,18 @@ export default function ScannerLTDPage() {
     },
   });
 
+  // Request ID ref for preventing race conditions
+  const requestIdRef = useRef(0);
+
   const scanMutation = useMutation({
     mutationFn: async (request: ScannerRequest) => {
+      const reqId = ++requestIdRef.current;
       const res = await runScanner(request);
-      return { data: res.data || [], meta: (res as any).meta };
+      return { data: res.data || [], meta: (res as any).meta, reqId };
     },
     onSuccess: (result) => {
+      if (result.reqId !== requestIdRef.current) return;
+
       const totalScanned = result.meta?.total || result.data.length;
       setResults(result.data, result.meta || {
         total: result.data.length,
@@ -472,20 +524,10 @@ export default function ScannerLTDPage() {
       });
       setCurrentPage(1);
 
-      // Subscribe to live scanner updates via WebSocket
+      // Only historical queries on LTD page - no websocket subscription needed
       const validConditions = conditions.filter((c) => c.column && c.value !== "");
       if (validConditions.length > 0) {
         setActiveConditions(validConditions);
-        setLive(true);
-        sendMessage({
-          type: "subscribe_scanner",
-          conditions: validConditions.map((c) => ({
-            column: c.column,
-            operator: c.operator,
-            value: c.value,
-            logical: c.logical,
-          })),
-        });
       }
     },
   });
@@ -515,13 +557,10 @@ export default function ScannerLTDPage() {
   const resetConditions = () => {
     setConditions([{ ...DEFAULT_CONDITION }]);
     resetScanner();
-    // Unsubscribe from live scanner updates
-    sendMessage({ type: "unsubscribe_scanner" });
   };
 
   const stopLive = () => {
     setLive(false);
-    sendMessage({ type: "unsubscribe_scanner" });
   };
 
   const runScan = () => {
@@ -529,10 +568,10 @@ export default function ScannerLTDPage() {
     if (!valid.length) return;
     setLoading(true);
     scanMutation.mutate({
-      mode: "historical", date: new Date().toISOString().split("T")[0],
+      mode: "history", date: selectedDate,
       conditions: valid,
-      sort_by: "day_change_pct",
-      sort_order: "desc",
+      sort_by: sorting[0]?.id || "day_change_pct",
+      sort_order: sorting[0]?.desc ? "desc" : "asc",
       page: 1,
       page_size: 5000, // No artificial limit — return all matching records
     });
@@ -542,36 +581,44 @@ export default function ScannerLTDPage() {
     setConditions(preset.conditions);
     setLoading(true);
     scanMutation.mutate({
-      mode: "historical", date: new Date().toISOString().split("T")[0],
+      mode: "history", date: selectedDate,
       conditions: preset.conditions,
-      sort_by: "day_change_pct",
-      sort_order: "desc",
+      sort_by: sorting[0]?.id || "day_change_pct",
+      sort_order: sorting[0]?.desc ? "desc" : "asc",
       page: 1,
       page_size: 5000,
     });
   };
 
-  // Unsubscribe on unmount
+  // Unsubscribe on unmount - not needed for historical page
   useEffect(() => {
-    return () => {
-      sendMessage({ type: "unsubscribe_scanner" });
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    return () => {};
   }, []);
+
+  // Trigger runScan when sorting changes if it has run before
+  useEffect(() => {
+    if (hasRun && !isLive) {
+      runScan();
+    }
+  }, [sorting]);
 
   const hasValidConditions = conditions.some(
     (c) => c.column && c.value !== ""
   );
 
   const totalScanned = meta?.total_scanned || meta?.total || results.length;
+  const totalMatched = meta?.total || results.length;
 
   const queryMutation = useMutation({
     mutationFn: async (request: import("@/types/scanner").UnifiedQueryRequest) => {
+      const reqId = ++requestIdRef.current;
       const { runQuery } = await import("@/services/data");
       const res = await runQuery(request);
-      return { data: res.data || [], meta: (res as any).meta };
+      return { data: res.data || [], meta: (res as any).meta, reqId };
     },
     onSuccess: (result) => {
+      if (result.reqId !== requestIdRef.current) return;
+
       setResults(result.data, result.meta || {
         total: result.data.length,
         total_scanned: result.data.length,
@@ -589,12 +636,12 @@ export default function ScannerLTDPage() {
       queryMutation.mutate({
         query_text: queryText,
         execution_target: target,
-        date: date,
+        date: date || selectedDate,
         page: 1,
-        page_size: pageSize,
+        page_size: 5000,
       });
     },
-    [queryMutation, pageSize]
+    [queryMutation, selectedDate]
   );
 
   return (
@@ -606,6 +653,8 @@ export default function ScannerLTDPage() {
         isOpen={queryBuilderOpen}
         onClose={() => setQueryBuilderOpen(false)}
         onExecute={handleQueryBuilderExecute}
+        hideTargetSelector={true}
+        storeHook={useColumnLTDStore}
       />
 
       <motion.div
@@ -695,6 +744,19 @@ export default function ScannerLTDPage() {
                 )}
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: "var(--sp-2)", flexShrink: 0 }}>
+                {datesQuery.data && (
+                  <select
+                    className="select"
+                    value={selectedDate}
+                    onChange={(e) => setSelectedDate(e.target.value)}
+                    style={{ height: 26, fontSize: 12, padding: "0 8px" }}
+                  >
+                    <option value="" disabled>Select Date</option>
+                    {datesQuery.data.map((date) => (
+                      <option key={date} value={date}>{date}</option>
+                    ))}
+                  </select>
+                )}
                 {isLive && (
                   <button
                     className="btn btn-ghost"
@@ -784,13 +846,15 @@ export default function ScannerLTDPage() {
               <ScanSummary
                 results={results}
                 totalScanned={totalScanned}
+                totalMatched={totalMatched}
                 isLive={isLive}
                 liveUpdateCount={liveUpdateCount}
                 lastUpdated={lastUpdated}
+                meta={meta}
               />
-              
+
               <div style={{ display: "flex", alignItems: "center", gap: "var(--sp-3)", flexShrink: 0 }}>
-                <ColumnSelector />
+                <ColumnSelector storeHook={useColumnLTDStore} />
                 <button
                   className="btn btn-secondary"
                   style={{ height: 32 }}
@@ -800,18 +864,25 @@ export default function ScannerLTDPage() {
                   <Download size={14} />
                   <span>CSV</span>
                 </button>
-                <PageSizeSelector />
+                <PageSizeSelector options={[25, 50, 100, 250, 1000]} storeHook={useColumnLTDStore} />
               </div>
             </div>
           )}
 
-          {scanMutation.isPending || scannerLoading ? (
-            <SkeletonTable rows={6} cols={6} />
-          ) : scanMutation.isError ? (
+          {/* State rendering */}
+          {scanMutation.isPending || queryMutation.isPending ? (
+            <SkeletonTable rows={10} cols={8} />
+          ) : scanMutation.isError || queryMutation.isError ? (
             <ErrorState
               title="Scan Failed"
               message="The scanner encountered an error. Please check your conditions and try again."
               onRetry={runScan}
+            />
+          ) : hasRun && results.length === 0 ? (
+            <EmptyState
+              icon={ScanSearch}
+              title="No stocks matched"
+              message="Try adjusting your filters or selecting a different preset."
             />
           ) : results.length > 0 ? (
             <>
@@ -823,13 +894,18 @@ export default function ScannerLTDPage() {
                   pageIndex: currentPage - 1,
                   pageSize: pageSize,
                 }}
+                sorting={sorting}
+                onSortingChange={setSorting}
+                manualSorting={true}
+                storeHook={useColumnLTDStore}
               />
               <Pagination
                 currentPage={currentPage}
-                totalItems={results.length}
+                totalItems={totalMatched}
+                maxItems={5000}
                 pageSize={pageSize}
                 onPageChange={setCurrentPage}
-                onPageSizeChange={() => {}}
+                onPageSizeChange={() => { }}
               />
             </>
           ) : hasRun ? (

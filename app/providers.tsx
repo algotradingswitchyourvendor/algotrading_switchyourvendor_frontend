@@ -2,8 +2,10 @@
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useState, type ReactNode } from "react";
+import { useWebSocket } from "@/hooks/useWebSocket";
 
 export function Providers({ children }: { children: ReactNode }) {
+  useWebSocket();
   const [queryClient] = useState(
     () =>
       new QueryClient({

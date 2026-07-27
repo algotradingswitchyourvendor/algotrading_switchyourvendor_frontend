@@ -38,7 +38,8 @@ export function ColumnSelector({
   groupsOverride,
   onColumnToggle,
   onGroupToggle,
-  onReset
+  onReset,
+  storeHook
 }: { 
   availableColumns?: string[];
   metadataOverride?: ColumnMetadata[];
@@ -47,8 +48,10 @@ export function ColumnSelector({
   onColumnToggle?: (col: string) => void;
   onGroupToggle?: (group: string, isFull: boolean) => void;
   onReset?: () => void;
+  storeHook?: typeof useColumnStore;
 }) {
-  const store = useColumnStore();
+  const useStore = storeHook || useColumnStore;
+  const store = useStore();
   const metadata = metadataOverride || store.metadata;
   const groups = groupsOverride || store.groups;
   const visibleColumns = visibleColumnsOverride || store.visibleColumns;

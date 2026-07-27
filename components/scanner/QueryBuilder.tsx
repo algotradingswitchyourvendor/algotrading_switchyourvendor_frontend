@@ -31,6 +31,8 @@ interface QueryBuilderProps {
   isOpen: boolean;
   onClose: () => void;
   onExecute: (query: string, target: "live" | "history", date?: string) => void;
+  hideTargetSelector?: boolean;
+  storeHook?: typeof useColumnStore;
 }
 
 const EXAMPLE_QUERIES = [
@@ -56,12 +58,13 @@ const OPERATOR_BUTTONS = [
   { label: "(  )", insert: "(" },
 ];
 
-export function QueryBuilder({ isOpen, onClose, onExecute }: QueryBuilderProps) {
+export function QueryBuilder({ isOpen, onClose, onExecute, hideTargetSelector, storeHook }: QueryBuilderProps) {
   const [query, setQuery] = useState("");
-  const [target, setTarget] = useState<"live" | "history">("live");
+  const [target, setTarget] = useState<"live" | "history">(hideTargetSelector ? "history" : "live");
   const [historyDate, setHistoryDate] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const { metadata } = useColumnStore();
+  const useStore = storeHook || useColumnStore;
+  const { metadata } = useStore();
 
   // Parse and validate in real-time
   const analysis = useMemo(() => {
@@ -196,38 +199,40 @@ export function QueryBuilder({ isOpen, onClose, onExecute }: QueryBuilderProps) 
             <div style={{ display: "flex", alignItems: "center", gap: "var(--sp-4)" }}>
               
               {/* Execution Target Selector */}
-              <div style={{ display: "flex", alignItems: "center", gap: "var(--sp-2)" }}>
-                <label style={{ fontSize: 12, display: "flex", alignItems: "center", gap: 4 }}>
-                  <input 
-                    type="radio" 
-                    name="target" 
-                    value="live" 
-                    checked={target === "live"} 
-                    onChange={() => setTarget("live")} 
-                  /> Live
-                </label>
-                <label style={{ fontSize: 12, display: "flex", alignItems: "center", gap: 4 }}>
-                  <input 
-                    type="radio" 
-                    name="target" 
-                    value="history" 
-                    checked={target === "history"} 
-                    onChange={() => setTarget("history")} 
-                  /> History
-                </label>
-                
-                {target === "history" && (
-                  <input 
-                    type="date" 
-                    className="input" 
-                    style={{ height: 26, fontSize: 12, padding: "0 8px" }}
-                    value={historyDate}
-                    onChange={(e) => setHistoryDate(e.target.value)}
-                  />
-                )}
-              </div>
+              {!hideTargetSelector && (
+                <div style={{ display: "flex", alignItems: "center", gap: "var(--sp-2)" }}>
+                  <label style={{ fontSize: 12, display: "flex", alignItems: "center", gap: 4 }}>
+                    <input 
+                      type="radio" 
+                      name="target" 
+                      value="live" 
+                      checked={target === "live"} 
+                      onChange={() => setTarget("live")} 
+                    /> Live
+                  </label>
+                  <label style={{ fontSize: 12, display: "flex", alignItems: "center", gap: 4 }}>
+                    <input 
+                      type="radio" 
+                      name="target" 
+                      value="history" 
+                      checked={target === "history"} 
+                      onChange={() => setTarget("history")} 
+                    /> History
+                  </label>
+                  
+                  {target === "history" && (
+                    <input 
+                      type="date" 
+                      className="input" 
+                      style={{ height: 26, fontSize: 12, padding: "0 8px" }}
+                      value={historyDate}
+                      onChange={(e) => setHistoryDate(e.target.value)}
+                    />
+                  )}
+                </div>
+              )}
               
-              <div style={{ width: 1, height: 16, backgroundColor: "var(--border-primary)" }} />
+              {!hideTargetSelector && <div style={{ width: 1, height: 16, backgroundColor: "var(--border-primary)" }} />}
 
               <div style={{ display: "flex", alignItems: "center", gap: "var(--sp-2)" }}>
                 <button className="btn btn-ghost" onClick={() => setQuery("")} title="Clear query">
@@ -416,7 +421,7 @@ export function QueryBuilder({ isOpen, onClose, onExecute }: QueryBuilderProps) 
 
             {/* Right: RatioGallery */}
             <div style={{ width: 240, flexShrink: 0 }}>
-              <RatioGallery onSelect={handleColumnSelect} />
+              <RatioGallery onSelect={handleColumnSelect} storeHook={storeHook} />
             </div>
           </div>
         </motion.div>

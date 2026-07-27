@@ -48,8 +48,11 @@ export async function fetchStockDetail(symbol: string): Promise<ApiResponse<Stoc
 
 // ── Metadata ───────────────────────────────────────────────────────────
 
-export async function fetchMetadata(): Promise<ApiResponse<MetadataResponse>> {
-  return api.get<MetadataResponse>(ENDPOINTS.METADATA);
+export async function fetchMetadata(target?: "live" | "history", date?: string): Promise<ApiResponse<MetadataResponse>> {
+  const queryParams: Record<string, string> = {};
+  if (target) queryParams.target = target;
+  if (date) queryParams.date = date;
+  return api.get<MetadataResponse>(ENDPOINTS.METADATA, queryParams);
 }
 
 // ── Market Status ──────────────────────────────────────────────────────
