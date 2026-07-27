@@ -568,7 +568,7 @@ export default function ScannerLTDPage() {
     if (!valid.length) return;
     setLoading(true);
     scanMutation.mutate({
-      mode: "history", date: selectedDate,
+      mode: "historical", date: selectedDate,
       conditions: valid,
       sort_by: sorting[0]?.id || "day_change_pct",
       sort_order: sorting[0]?.desc ? "desc" : "asc",
@@ -581,7 +581,7 @@ export default function ScannerLTDPage() {
     setConditions(preset.conditions);
     setLoading(true);
     scanMutation.mutate({
-      mode: "history", date: selectedDate,
+      mode: "historical", date: selectedDate,
       conditions: preset.conditions,
       sort_by: sorting[0]?.id || "day_change_pct",
       sort_order: sorting[0]?.desc ? "desc" : "asc",

@@ -268,7 +268,10 @@ interface DynamicTableProps {
   columnOrderOverride?: string[];
   pinnedColumnsOverride?: { left: string[]; right: string[] };
   onColumnOrderChange?: (order: string[]) => void;
-  storeHook?: typeof useColumnStore;
+  storeHook?: any; // avoid type issue if useColumnStore isn't perfectly matched
+  sorting?: SortingState;
+  onSortingChange?: React.Dispatch<React.SetStateAction<SortingState>> | ((updater: import("@tanstack/react-table").Updater<SortingState>) => void);
+  manualSorting?: boolean;
 }
 
 export interface DynamicTableRef {
@@ -276,16 +279,18 @@ export interface DynamicTableRef {
 }
 
 export const DynamicTable = forwardRef<DynamicTableRef, DynamicTableProps>(
-  ({ data, globalFilter, pagination, columnsOverride, metadataOverride, columnOrderOverride, pinnedColumnsOverride, onColumnOrderChange, storeHook }, ref) => {
+  ({ data, globalFilter, pagination, columnsOverride, metadataOverride, columnOrderOverride, pinnedColumnsOverride, onColumnOrderChange, storeHook, sorting: controlledSorting, onSortingChange: controlledOnSortingChange, manualSorting }, ref) => {
     const useStore = storeHook || useColumnStore;
     const store = useStore();
 
-    const metadata = metadataOverride || store.metadata;
-    const visibleColumns = columnsOverride || store.visibleColumns;
-    const columnOrder = columnOrderOverride || store.columnOrder;
-    const pinnedColumns = pinnedColumnsOverride || store.pinnedColumns;
-    const setColumnOrder = onColumnOrderChange || store.setColumnOrder;
-    const [sorting, setSorting] = useState<SortingState>([]);
+    const metadata: ColumnMetadata[] = metadataOverride || store.metadata;
+    const visibleColumns: string[] = columnsOverride || store.visibleColumns;
+    const columnOrder: string[] = columnOrderOverride || store.columnOrder;
+    const pinnedColumns: { left: string[]; right: string[] } = pinnedColumnsOverride || store.pinnedColumns;
+    const setColumnOrder: (order: string[]) => void = onColumnOrderChange || store.setColumnOrder;
+    const [internalSorting, setInternalSorting] = useState<SortingState>([]);
+    const sorting = controlledSorting !== undefined ? controlledSorting : internalSorting;
+    const setSorting = controlledOnSortingChange !== undefined ? controlledOnSortingChange : setInternalSorting;
 
     const metaMap = useMemo(() => {
       const map = new Map<string, ColumnMetadata>();
@@ -375,6 +380,7 @@ export const DynamicTable = forwardRef<DynamicTableRef, DynamicTableProps>(
           setColumnOrder(updater);
         }
       },
+      manualSorting: manualSorting,
       getCoreRowModel: getCoreRowModel(),
       getSortedRowModel: getSortedRowModel(),
       getFilteredRowModel: getFilteredRowModel(),
