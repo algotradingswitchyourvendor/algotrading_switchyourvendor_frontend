@@ -14,7 +14,7 @@ interface MarketState {
   stocks: StockRecord[];
   marketStatus: MarketStatusData | null;
   cacheInfo: CacheInfo | null;
-  snapshotId: number;
+  version: number;
 
   // UI State
   isLoading: boolean;
@@ -34,21 +34,22 @@ export const useMarketStore = create<MarketState>((set, get) => ({
   stocks: [],
   marketStatus: null,
   cacheInfo: null,
-  snapshotId: 0,
+  version: 0,
   isLoading: true,
   error: null,
   lastUpdated: null,
 
   setStocks: (stocks) =>
-    set({
+    set((state) => ({
       stocks,
+      version: state.version + 1,
       isLoading: false,
       error: null,
       lastUpdated: new Date(),
-    }),
+    })),
 
   applyDelta: (changedRows) => {
-    const { stocks, snapshotId } = get();
+    const { stocks, version } = get();
     if (!changedRows.length) return;
 
     // Build a map for O(1) lookups
@@ -67,7 +68,7 @@ export const useMarketStore = create<MarketState>((set, get) => ({
 
     set({
       stocks: [...updated, ...newStocks],
-      snapshotId: snapshotId + 1,
+      version: version + 1,
       lastUpdated: new Date(),
     });
   },

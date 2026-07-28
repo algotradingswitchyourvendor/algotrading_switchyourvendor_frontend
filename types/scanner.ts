@@ -68,6 +68,21 @@ export interface ScannerRequest {
 export interface ScannerPreset {
   id: string;
   name: string;
-  description: string;
-  conditions: ScannerCondition[];
+  description?: string;
+  scanner_type?: string;
+  version?: number;
+  request: UnifiedQueryRequest;
+  is_public?: boolean;
+  favorite?: boolean;
+  usage_count?: number;
+  created_at?: string;
+  updated_at?: string;
+  last_used?: string | null;
+  is_deleted?: boolean;
+  
+  // New state fields
+  sorting?: any[];
+  page_size?: number;
+  selected_columns?: string[];
+  ui_state?: Record<string, any>;
 }

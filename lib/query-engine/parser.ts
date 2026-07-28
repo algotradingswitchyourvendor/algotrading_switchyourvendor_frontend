@@ -1,5 +1,5 @@
 /**
- * Query Engine Parser — Recursive descent parser producing an AST.
+ * Query Engine Parser â€” Recursive descent parser producing an AST.
  *
  * Grammar:
  *   Expression  := OrExpr
@@ -15,8 +15,9 @@
  */
 
 import { TokenType, type Token, type TokenizeResult } from "./tokenizer";
+import type { ScannerCondition } from "@/types/scanner";
 
-/* ── AST Node Types ──────────────────────────────────────────── */
+/* â”€â”€ AST Node Types â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 export type ASTNode =
   | BinaryOpNode
@@ -76,7 +77,7 @@ export interface IdentifierNode {
   name: string;
 }
 
-/* ── Parse Result ────────────────────────────────────────────── */
+/* â”€â”€ Parse Result â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 export interface ParseResult {
   ast: ASTNode | null;
@@ -89,7 +90,7 @@ export interface ParseError {
   length: number;
 }
 
-/* ── Parser ──────────────────────────────────────────────────── */
+/* â”€â”€ Parser â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 export function parse(tokenResult: TokenizeResult): ParseResult {
   const { tokens, errors: tokenErrors } = tokenResult;
@@ -145,7 +146,7 @@ export function parse(tokenResult: TokenizeResult): ParseResult {
   }
 }
 
-/* ── Internal Parser Class ───────────────────────────────────── */
+/* â”€â”€ Internal Parser Class â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 class ParserError extends Error {
   position: number;
@@ -195,7 +196,7 @@ class Parser {
     return this.advance();
   }
 
-  /* ── Grammar Rules ─────────────────────────────────────────── */
+  /* â”€â”€ Grammar Rules â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
   parseExpression(): ASTNode {
     return this.parseOrExpr();
@@ -333,4 +334,65 @@ class Parser {
       token.length || 1
     );
   }
+}
+
+export function astToConditions(node: ASTNode | null, currentLogical: "AND" | "OR" = "AND"): ScannerCondition[] {
+  if (!node) return [];
+
+  const conditions: ScannerCondition[] = [];
+
+  switch (node.type) {
+    case "Comparison": {
+      if (node.left.type === "Identifier") {
+        let value: any = null;
+        if (node.right.type === "NumberLiteral" || node.right.type === "StringLiteral") {
+          value = node.right.value;
+        }
+        conditions.push({
+          column: node.left.name,
+          operator: node.operator,
+          value: value,
+          logical: currentLogical,
+        });
+      }
+      break;
+    }
+    case "Between": {
+      if (node.value.type === "Identifier" && node.low.type === "NumberLiteral" && node.high.type === "NumberLiteral") {
+        conditions.push({
+          column: node.value.name,
+          operator: "between",
+          value: [node.low.value, node.high.value],
+          logical: currentLogical,
+        });
+      }
+      break;
+    }
+    case "Contains": {
+      if (node.haystack.type === "Identifier" && node.needle.type === "StringLiteral") {
+        conditions.push({
+          column: node.haystack.name,
+          operator: "contains",
+          value: node.needle.value,
+          logical: currentLogical,
+        });
+      }
+      break;
+    }
+    case "BinaryOp": {
+      if (node.operator === "AND" || node.operator === "OR") {
+        const left = astToConditions(node.left, currentLogical);
+        const right = astToConditions(node.right, node.operator as "AND" | "OR");
+        conditions.push(...left, ...right);
+      }
+      break;
+    }
+    case "UnaryOp": {
+      // Unary NOT is harder to flatten into ScannerCondition unless we invert the operator
+      // Since ScannerCondition array assumes simple AND/OR flattening, we will skip it for now.
+      break;
+    }
+  }
+
+  return conditions;
 }

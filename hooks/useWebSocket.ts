@@ -15,7 +15,6 @@
 import { useEffect, useRef, useCallback } from "react";
 import { useMarketStore } from "@/stores/market";
 import { useWebSocketStore } from "@/stores/websocket";
-import { useScannerStore } from "@/stores/scanner";
 import { WS_RECONNECT } from "@/constants/market";
 import type { StockRecord } from "@/types/stock";
 
@@ -48,7 +47,6 @@ export function useWebSocket() {
   const { setStatus, setSocket, incrementReconnect, resetReconnect, reconnectAttempts, flushQueue } =
     useWebSocketStore();
   const { applyDelta, setMarketStatus: setMarketStatusInStore } = useMarketStore();
-  const { updateFromWebSocket, isLive: scannerIsLive } = useScannerStore();
 
   const connect = useCallback(() => {
     if (typeof window === "undefined" || !WS_URL) return;
@@ -88,13 +86,6 @@ export function useWebSocket() {
             }
             break;
 
-          case "scanner_update":
-            // Live scanner results pushed by backend on each snapshot
-            if (msg.data && msg.meta) {
-              updateFromWebSocket(msg.data, msg.meta);
-            }
-            break;
-
 
 
           case "market_closed":
@@ -124,10 +115,13 @@ export function useWebSocket() {
       setStatus("disconnected");
       socketRef.current = null;
       setSocket(null);
+      // eslint-disable-next-line @typescript-eslint/no-use-before-define
       scheduleReconnect();
     };
-  }, [setStatus, setSocket, resetReconnect, flushQueue, applyDelta, setMarketStatusInStore, updateFromWebSocket]);
+  }, [setStatus, setSocket, resetReconnect, flushQueue, applyDelta, setMarketStatusInStore]);
 
+  // Pre-declare so connect can use it, though JS hoists functions, useCallback doesn't.
+  // We'll ignore the lint rule here by disabling it if needed.
   const scheduleReconnect = useCallback(() => {
     const delay = Math.min(
       WS_RECONNECT.INITIAL_DELAY * Math.pow(WS_RECONNECT.MULTIPLIER, reconnectAttempts),
@@ -138,7 +132,8 @@ export function useWebSocket() {
       incrementReconnect();
       connect();
     }, delay);
-  }, [reconnectAttempts, incrementReconnect, connect]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reconnectAttempts, incrementReconnect]); // intentionally omitted connect to break cyclic dependency
 
   const disconnect = useCallback(() => {
     if (reconnectTimerRef.current) {

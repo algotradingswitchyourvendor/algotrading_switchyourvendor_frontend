@@ -8,7 +8,10 @@ import { DynamicTable, type DynamicTableRef } from "@/components/dashboard/Dynam
 import { Pagination } from "@/components/common/Pagination";
 import { PageSizeSelector } from "@/components/dashboard/PageSizeSelector";
 import { ColumnSelector } from "@/components/dashboard/ColumnSelector";
+import { PresetCard } from "@/components/scanner/PresetCard";
 import { QueryBuilder } from "@/components/scanner/QueryBuilder";
+import { SaveQueryModal } from "@/components/scanner/SaveQueryModal";
+import { MyPresetsList } from "@/components/scanner/MyPresetsList";
 import {
   EmptyState,
   SkeletonTable,
@@ -43,6 +46,7 @@ import {
   Square,
   Sparkles,
   AlertTriangle,
+  Save,
 } from "lucide-react";
 
 /* ── Operators ───────────────────────────────────────────────── */
@@ -159,97 +163,7 @@ function ConditionRow({
   );
 }
 
-/* ── Preset Card ─────────────────────────────────────────────── */
 
-function PresetCard({
-  preset,
-  onSelect,
-}: {
-  preset: ScannerPreset;
-  onSelect: (preset: ScannerPreset) => void;
-}) {
-  const nameLower = preset.name.toLowerCase();
-  let Icon = PRESET_ICONS.default;
-  if (nameLower.includes("bull")) Icon = PRESET_ICONS.bullish;
-  else if (nameLower.includes("bear")) Icon = PRESET_ICONS.bearish;
-  else if (nameLower.includes("volume")) Icon = PRESET_ICONS.volume;
-  else if (nameLower.includes("momentum")) Icon = PRESET_ICONS.momentum;
-  else if (nameLower.includes("institution")) Icon = PRESET_ICONS.institutional;
-
-  return (
-    <div
-      role="button"
-      tabIndex={0}
-      onClick={() => onSelect(preset)}
-      className="card"
-      style={{
-        padding: "var(--sp-3) var(--sp-4)",
-        textAlign: "left",
-        cursor: "pointer",
-        minWidth: 160,
-        flex: "0 0 auto",
-        border: "1px solid var(--border-primary)",
-        transition: "all var(--transition-fast)",
-        background: "none",
-        fontFamily: "var(--font-sans)",
-      }}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          onSelect(preset);
-        }
-      }}
-      onMouseOver={(e) => {
-        e.currentTarget.style.borderColor = "var(--color-accent)";
-        e.currentTarget.style.backgroundColor = "var(--color-accent-light)";
-      }}
-      onMouseOut={(e) => {
-        e.currentTarget.style.borderColor = "var(--border-primary)";
-        e.currentTarget.style.backgroundColor = "transparent";
-      }}
-    >
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: "var(--sp-2)",
-          marginBottom: 4,
-        }}
-      >
-        <Icon size={14} style={{ color: "var(--color-accent)", flexShrink: 0 }} />
-        <span
-          style={{
-            fontSize: 12,
-            fontWeight: 600,
-            color: "var(--text-primary)",
-          }}
-        >
-          {preset.name}
-        </span>
-      </div>
-      <p
-        style={{
-          fontSize: 11,
-          color: "var(--text-tertiary)",
-          lineHeight: 1.4,
-        }}
-      >
-        {preset.description}
-      </p>
-      <span
-        style={{
-          fontSize: 10,
-          color: "var(--text-muted)",
-          marginTop: 4,
-          display: "block",
-        }}
-      >
-        {preset.conditions.length} condition
-        {preset.conditions.length !== 1 ? "s" : ""}
-      </span>
-    </div>
-  );
-}
 
 /* ── Active Filter Chips ─────────────────────────────────────── */
 
@@ -425,6 +339,8 @@ export default function ScannerLTDPage() {
   ]);
   const [currentPage, setCurrentPage] = useState(1);
   const [queryBuilderOpen, setQueryBuilderOpen] = useState(false);
+  const [saveModalOpen, setSaveModalOpen] = useState(false);
+  const [activeRequest, setActiveRequest] = useState<import("@/types/scanner").UnifiedQueryRequest | null>(null);
   const [sorting, setSorting] = useState<import("@tanstack/react-table").SortingState>([{ id: "day_change_pct", desc: true }]);
   const tableRef = useRef<DynamicTableRef>(null);
 
@@ -476,6 +392,11 @@ export default function ScannerLTDPage() {
     setLoading,
     setError,
     reset: resetScanner,
+    loadedPresetId,
+    loadedPresetName,
+    isModified,
+    setLoadedPreset,
+    checkModified,
   } = useScannerLTDStore();
 
   const { stocks } = useMarketStore();
@@ -504,33 +425,6 @@ export default function ScannerLTDPage() {
 
   // Request ID ref for preventing race conditions
   const requestIdRef = useRef(0);
-
-  const scanMutation = useMutation({
-    mutationFn: async (request: ScannerRequest) => {
-      const reqId = ++requestIdRef.current;
-      const res = await runScanner(request);
-      return { data: res.data || [], meta: (res as any).meta, reqId };
-    },
-    onSuccess: (result) => {
-      if (result.reqId !== requestIdRef.current) return;
-
-      const totalScanned = result.meta?.total || result.data.length;
-      setResults(result.data, result.meta || {
-        total: result.data.length,
-        page: 1,
-        page_size: result.data.length,
-        total_pages: 1,
-        conditions_applied: 0,
-      });
-      setCurrentPage(1);
-
-      // Only historical queries on LTD page - no websocket subscription needed
-      const validConditions = conditions.filter((c) => c.column && c.value !== "");
-      if (validConditions.length > 0) {
-        setActiveConditions(validConditions);
-      }
-    },
-  });
 
   const handleConditionChange = useCallback(
     (index: number, field: keyof ScannerCondition, value: string | number) => {
@@ -567,27 +461,47 @@ export default function ScannerLTDPage() {
     const valid = conditions.filter((c) => c.column && c.value !== "");
     if (!valid.length) return;
     setLoading(true);
-    scanMutation.mutate({
-      mode: "historical", date: selectedDate,
+    queryMutation.mutate({
+      execution_target: "history", 
+      date: selectedDate,
       conditions: valid,
-      sort_by: sorting[0]?.id || "day_change_pct",
-      sort_order: sorting[0]?.desc ? "desc" : "asc",
-      page: 1,
-      page_size: 5000, // No artificial limit — return all matching records
-    });
-  };
-
-  const applyPreset = (preset: ScannerPreset) => {
-    setConditions(preset.conditions);
-    setLoading(true);
-    scanMutation.mutate({
-      mode: "historical", date: selectedDate,
-      conditions: preset.conditions,
       sort_by: sorting[0]?.id || "day_change_pct",
       sort_order: sorting[0]?.desc ? "desc" : "asc",
       page: 1,
       page_size: 5000,
     });
+  };
+
+  const applyPreset = (preset: ScannerPreset) => {
+    setLoadedPreset(preset);
+
+    // Populate Builder UI if structured conditions exist
+    if (preset.request?.conditions && preset.request.conditions.length > 0) {
+      setConditions(preset.request.conditions);
+    } else {
+      setConditions([{ ...DEFAULT_CONDITION }]);
+    }
+    
+    // Set the active query but don't run it yet
+    if (preset.request) {
+      setActiveRequest(preset.request);
+      
+      // If it's a raw query, open the builder so they can see/edit it
+      if (preset.request.query_text) {
+        setQueryBuilderOpen(true);
+      }
+    }
+
+    // Restore UI state if it exists
+    if (preset.sorting) {
+      setSorting(preset.sorting);
+    }
+    if (preset.page_size) {
+      useColumnLTDStore.getState().setPageSize(preset.page_size);
+    }
+    if (preset.selected_columns) {
+      useColumnLTDStore.getState().setVisibleColumns(preset.selected_columns);
+    }
   };
 
   // Unsubscribe on unmount - not needed for historical page
@@ -614,7 +528,7 @@ export default function ScannerLTDPage() {
       const reqId = ++requestIdRef.current;
       const { runQuery } = await import("@/services/data");
       const res = await runQuery(request);
-      return { data: res.data || [], meta: (res as any).meta, reqId };
+      return { data: res.data || [], meta: (res as any).meta, reqId, request };
     },
     onSuccess: (result) => {
       if (result.reqId !== requestIdRef.current) return;
@@ -628,6 +542,13 @@ export default function ScannerLTDPage() {
         conditions_applied: 0,
       });
       setCurrentPage(1);
+
+      if (result.request.execution_target === "history") {
+        setActiveRequest(result.request);
+        if (result.request.conditions && result.request.conditions.length > 0) {
+          setActiveConditions(result.request.conditions);
+        }
+      }
     },
   });
 
@@ -646,7 +567,35 @@ export default function ScannerLTDPage() {
 
   return (
     <div style={{ display: "flex", flexDirection: "column" }}>
-      <TopNavigation title="Life Till Day Scanner" />
+      <TopNavigation title="Market Scanner LTD" />
+      
+      {loadedPresetName && (
+        <div style={{ 
+          padding: "var(--sp-2) var(--sp-6)", 
+          backgroundColor: "var(--bg-secondary)", 
+          borderBottom: "1px solid var(--border-light)",
+          display: "flex",
+          alignItems: "center",
+          gap: "var(--sp-2)",
+          fontSize: 12
+        }}>
+          <span style={{ color: "var(--text-secondary)" }}>Current Preset:</span>
+          <span style={{ fontWeight: 600, color: "var(--text-primary)" }}>{loadedPresetName}</span>
+          {isModified && (
+            <span style={{ 
+              color: "var(--color-warning)", 
+              display: "flex", 
+              alignItems: "center", 
+              gap: 4,
+              marginLeft: "var(--sp-2)",
+              fontSize: 11,
+              fontWeight: 500
+            }}>
+              ● Modified
+            </span>
+          )}
+        </div>
+      )}
 
       {/* Query Builder Modal */}
       <QueryBuilder
@@ -654,7 +603,25 @@ export default function ScannerLTDPage() {
         onClose={() => setQueryBuilderOpen(false)}
         onExecute={handleQueryBuilderExecute}
         hideTargetSelector={true}
+        initialQuery={activeRequest?.query_text}
         storeHook={useColumnLTDStore}
+      />
+      <SaveQueryModal 
+        isOpen={saveModalOpen} 
+        onClose={() => setSaveModalOpen(false)} 
+        request={activeRequest}
+        scannerType="historical"
+        sorting={sorting}
+        pageSize={pageSize}
+        selectedColumns={useColumnLTDStore.getState().visibleColumns}
+        loadedPresetId={loadedPresetId}
+        loadedPresetName={loadedPresetName}
+        isModified={isModified}
+        onUpdateSuccess={() => {
+          if (activeRequest) {
+            checkModified(activeRequest);
+          }
+        }}
       />
 
       <motion.div
@@ -698,6 +665,8 @@ export default function ScannerLTDPage() {
               </div>
             </div>
           )}
+
+          <MyPresetsList scannerType="historical" onSelect={applyPreset} />
 
           {/* Condition Builder */}
           <div className="card" style={{ padding: "var(--sp-5)" }}>
@@ -792,12 +761,21 @@ export default function ScannerLTDPage() {
                   Create Screener
                 </button>
                 <button
+                  className="btn btn-secondary"
+                  onClick={() => setSaveModalOpen(true)}
+                  title="Save current conditions as a preset"
+                  disabled={!activeRequest}
+                >
+                  <Save size={13} />
+                  Save Query
+                </button>
+                <button
                   className="btn btn-primary"
                   onClick={runScan}
-                  disabled={scanMutation.isPending || !hasValidConditions}
+                  disabled={queryMutation.isPending || !hasValidConditions}
                 >
                   <Play size={13} />
-                  {scanMutation.isPending ? "Scanning..." : "Run Scan"}
+                  {queryMutation.isPending ? "Scanning..." : "Run Scan"}
                 </button>
               </div>
             </div>
@@ -870,9 +848,9 @@ export default function ScannerLTDPage() {
           )}
 
           {/* State rendering */}
-          {scanMutation.isPending || queryMutation.isPending ? (
+          {queryMutation.isPending ? (
             <SkeletonTable rows={10} cols={8} />
-          ) : scanMutation.isError || queryMutation.isError ? (
+          ) : queryMutation.isError ? (
             <ErrorState
               title="Scan Failed"
               message="The scanner encountered an error. Please check your conditions and try again."

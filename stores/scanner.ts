@@ -8,8 +8,9 @@
  */
 
 import { create } from "zustand";
+import { generateCanonicalHash } from "@/utils/canonical";
 import type { StockRecord } from "@/types/stock";
-import type { ScannerCondition } from "@/types/scanner";
+import type { ScannerCondition, UnifiedQueryRequest, ScannerPreset } from "@/types/scanner";
 
 interface ScannerMeta {
   total: number;
@@ -30,6 +31,7 @@ interface ScannerState {
   meta: ScannerMeta | null;
 
   // Query state
+  activeRequest: UnifiedQueryRequest | null;
   activeConditions: ScannerCondition[];
   isLive: boolean;
   hasRun: boolean;
@@ -40,19 +42,31 @@ interface ScannerState {
   lastUpdated: Date | null;
   liveUpdateCount: number;
 
+  // Preset Tracking
+  loadedPresetId: string | null;
+  loadedPresetName: string | null;
+  baselineRequest: UnifiedQueryRequest | null;
+  isModified: boolean;
+
   // Actions
   setResults: (results: StockRecord[], meta: ScannerMeta) => void;
-  updateFromWebSocket: (results: StockRecord[], meta: ScannerMeta) => void;
+  executeLive: (stocks: StockRecord[], request: UnifiedQueryRequest) => void;
+  setActiveRequest: (request: UnifiedQueryRequest | null) => void;
   setActiveConditions: (conditions: ScannerCondition[]) => void;
   setLive: (isLive: boolean) => void;
   setLoading: (loading: boolean) => void;
   setError: (error: string | null) => void;
+  
+  setLoadedPreset: (preset: ScannerPreset | null) => void;
+  checkModified: (currentRequest: UnifiedQueryRequest | null) => void;
+  
   reset: () => void;
 }
 
-export const useScannerStore = create<ScannerState>((set) => ({
+export const useScannerStore = create<ScannerState>((set, get) => ({
   results: [],
   meta: null,
+  activeRequest: null,
   activeConditions: [],
   isLive: false,
   hasRun: false,
@@ -60,6 +74,10 @@ export const useScannerStore = create<ScannerState>((set) => ({
   error: null,
   lastUpdated: null,
   liveUpdateCount: 0,
+  loadedPresetId: null,
+  loadedPresetName: null,
+  baselineRequest: null,
+  isModified: false,
 
   setResults: (results, meta) =>
     set({
@@ -72,13 +90,27 @@ export const useScannerStore = create<ScannerState>((set) => ({
       liveUpdateCount: 0,
     }),
 
-  updateFromWebSocket: (results, meta) =>
+  executeLive: (stocks: StockRecord[], request: UnifiedQueryRequest) => {
+    const { results } = get();
+    const { UnifiedQueryEngine } = require("@/utils/queryEngine"); // lazy load to avoid circular deps if any
+    
+    const { results: newSlice, meta } = UnifiedQueryEngine.execute(stocks, request);
+    
+    // Deep compare to prevent unnecessary rerenders
+    const isDifferent = newSlice.length !== results.length || 
+                        newSlice.some((row: StockRecord, i: number) => row !== results[i]);
+
     set((state) => ({
-      results,
-      meta,
-      lastUpdated: new Date(),
       liveUpdateCount: state.liveUpdateCount + 1,
-    })),
+      ...(isDifferent && {
+        results: newSlice,
+        meta,
+        lastUpdated: new Date(),
+      })
+    }));
+  },
+
+  setActiveRequest: (request) => set({ activeRequest: request }),
 
   setActiveConditions: (conditions) =>
     set({ activeConditions: conditions }),
@@ -89,10 +121,38 @@ export const useScannerStore = create<ScannerState>((set) => ({
 
   setError: (error) => set({ error, isLoading: false }),
 
+  setLoadedPreset: (preset) => {
+    if (!preset) {
+      set({
+        loadedPresetId: null,
+        loadedPresetName: null,
+        baselineRequest: null,
+        isModified: false,
+      });
+      return;
+    }
+    set({
+      loadedPresetId: preset.id,
+      loadedPresetName: preset.name,
+      baselineRequest: preset.request,
+      isModified: false,
+    });
+  },
+
+  checkModified: (currentRequest) => {
+    set((state) => {
+      if (!state.loadedPresetId || !state.baselineRequest || !currentRequest) return { isModified: false };
+      
+      const isModified = generateCanonicalHash(state.baselineRequest) !== generateCanonicalHash(currentRequest);
+      return { isModified };
+    });
+  },
+
   reset: () =>
     set({
       results: [],
       meta: null,
+      activeRequest: null,
       activeConditions: [],
       isLive: false,
       hasRun: false,
@@ -100,5 +160,9 @@ export const useScannerStore = create<ScannerState>((set) => ({
       error: null,
       lastUpdated: null,
       liveUpdateCount: 0,
+      loadedPresetId: null,
+      loadedPresetName: null,
+      baselineRequest: null,
+      isModified: false,
     }),
 }));

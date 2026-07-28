@@ -21,7 +21,7 @@ import {
 } from "@/services/data";
 import { useEffect } from "react";
 
-export function useLiveData() {
+export function useGlobalMarketData() {
   const { setStocks, setCacheInfo, setMarketStatus, setLoading, setError } =
     useMarketStore();
   const { setMetadata } = useColumnStore();
