@@ -415,7 +415,6 @@ export default function ScannerPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [queryBuilderOpen, setQueryBuilderOpen] = useState(false);
   const [sorting, setSorting] = useState<import("@tanstack/react-table").SortingState>([{ id: "day_change_pct", desc: true }]);
-  const [activeRequest, setActiveRequest] = useState<any>(null);
   const tableRef = useRef<DynamicTableRef>(null);
 
   // Scanner store for results and live state
@@ -428,15 +427,25 @@ export default function ScannerPage() {
     liveUpdateCount,
     lastUpdated,
     activeConditions,
+    activeRequest,
     setResults,
     setActiveConditions,
+    setActiveRequest,
+    executeLive,
     setLive,
     setLoading,
     setError,
     reset: resetScanner,
   } = useScannerStore();
 
-  const { stocks } = useMarketStore();
+  const { stocks, version } = useMarketStore();
+
+  // Re-run executeLive on every new snapshot
+  useEffect(() => {
+    if (isLive && activeRequest) {
+      executeLive(stocks, activeRequest);
+    }
+  }, [version, isLive, activeRequest, stocks, executeLive]);
 
   // Use the store's sendMessage to send WS subscription messages
   // without creating a second WebSocket connection
