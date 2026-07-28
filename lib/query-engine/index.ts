@@ -10,7 +10,7 @@
 export { tokenize, TokenType } from "./tokenizer";
 export type { Token, TokenizeResult, TokenizeError } from "./tokenizer";
 
-export { parse } from "./parser";
+export { parse, astToConditions } from "./parser";
 export type { ASTNode, ParseResult, ParseError } from "./parser";
 
 // Evaluator removed - backend handles execution

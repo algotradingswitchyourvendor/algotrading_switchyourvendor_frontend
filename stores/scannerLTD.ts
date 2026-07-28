@@ -8,8 +8,9 @@
  */
 
 import { create } from "zustand";
+import { generateCanonicalHash } from "@/utils/canonical";
 import type { StockRecord } from "@/types/stock";
-import type { ScannerCondition } from "@/types/scanner";
+import type { ScannerCondition, UnifiedQueryRequest, ScannerPreset } from "@/types/scanner";
 
 interface ScannerMeta {
   total: number;
@@ -38,6 +39,12 @@ interface ScannerState {
   lastUpdated: Date | null;
   liveUpdateCount: number;
 
+  // Preset Tracking
+  loadedPresetId: string | null;
+  loadedPresetName: string | null;
+  baselineRequest: UnifiedQueryRequest | null;
+  isModified: boolean;
+
   // Actions
   setResults: (results: StockRecord[], meta: ScannerMeta) => void;
   updateFromWebSocket: (results: StockRecord[], meta: ScannerMeta) => void;
@@ -45,6 +52,10 @@ interface ScannerState {
   setLive: (isLive: boolean) => void;
   setLoading: (loading: boolean) => void;
   setError: (error: string | null) => void;
+  
+  setLoadedPreset: (preset: ScannerPreset | null) => void;
+  checkModified: (currentRequest: UnifiedQueryRequest | null) => void;
+
   reset: () => void;
 }
 
@@ -58,6 +69,10 @@ export const useScannerLTDStore = create<ScannerState>((set) => ({
   error: null,
   lastUpdated: null,
   liveUpdateCount: 0,
+  loadedPresetId: null,
+  loadedPresetName: null,
+  baselineRequest: null,
+  isModified: false,
 
   setResults: (results, meta) =>
     set({
@@ -87,6 +102,33 @@ export const useScannerLTDStore = create<ScannerState>((set) => ({
 
   setError: (error) => set({ error, isLoading: false }),
 
+  setLoadedPreset: (preset) => {
+    if (!preset) {
+      set({
+        loadedPresetId: null,
+        loadedPresetName: null,
+        baselineRequest: null,
+        isModified: false,
+      });
+      return;
+    }
+    set({
+      loadedPresetId: preset.id,
+      loadedPresetName: preset.name,
+      baselineRequest: preset.request,
+      isModified: false,
+    });
+  },
+
+  checkModified: (currentRequest) => {
+    set((state) => {
+      if (!state.loadedPresetId || !state.baselineRequest || !currentRequest) return { isModified: false };
+      
+      const isModified = generateCanonicalHash(state.baselineRequest) !== generateCanonicalHash(currentRequest);
+      return { isModified };
+    });
+  },
+
   reset: () =>
     set({
       results: [],
@@ -98,5 +140,9 @@ export const useScannerLTDStore = create<ScannerState>((set) => ({
       error: null,
       lastUpdated: null,
       liveUpdateCount: 0,
+      loadedPresetId: null,
+      loadedPresetName: null,
+      baselineRequest: null,
+      isModified: false,
     }),
 }));

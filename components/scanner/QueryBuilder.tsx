@@ -12,11 +12,12 @@
  * - Example queries
  */
 
-import { useState, useRef, useCallback, useMemo } from "react";
+import { useState, useRef, useCallback, useMemo, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { RatioGallery } from "./RatioGallery";
-import { tokenize, parse, validate, validateParentheses } from "@/lib/query-engine";
+import { tokenize, parse, validate, validateParentheses, astToConditions } from "@/lib/query-engine";
 import { useColumnStore } from "@/stores/columns";
+import type { ScannerCondition } from "@/types/scanner";
 import {
   X,
   Play,
@@ -30,9 +31,10 @@ import {
 interface QueryBuilderProps {
   isOpen: boolean;
   onClose: () => void;
-  onExecute: (query: string, target: "live" | "history", date?: string) => void;
+  onExecute: (query: string, target: "live" | "history", date?: string, conditions?: ScannerCondition[]) => void;
   hideTargetSelector?: boolean;
   storeHook?: typeof useColumnStore;
+  initialQuery?: string;
 }
 
 const EXAMPLE_QUERIES = [
@@ -58,13 +60,19 @@ const OPERATOR_BUTTONS = [
   { label: "(  )", insert: "(" },
 ];
 
-export function QueryBuilder({ isOpen, onClose, onExecute, hideTargetSelector, storeHook }: QueryBuilderProps) {
-  const [query, setQuery] = useState("");
+export function QueryBuilder({ isOpen, onClose, onExecute, hideTargetSelector, storeHook, initialQuery }: QueryBuilderProps) {
+  const [query, setQuery] = useState(initialQuery || "");
   const [target, setTarget] = useState<"live" | "history">(hideTargetSelector ? "history" : "live");
   const [historyDate, setHistoryDate] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const useStore = storeHook || useColumnStore;
   const { metadata } = useStore();
+
+  useEffect(() => {
+    if (initialQuery !== undefined) {
+      setQuery(initialQuery);
+    }
+  }, [initialQuery]);
 
   // Parse and validate in real-time
   const analysis = useMemo(() => {
@@ -123,10 +131,13 @@ export function QueryBuilder({ isOpen, onClose, onExecute, hideTargetSelector, s
   const handleExecute = useCallback(() => {
     if (!analysis.isValid) return;
     
+    // Generate the structured conditions array for local live execution
+    const conditions = astToConditions(analysis.ast);
+    
     // In history mode, ensure we have a date if required by your backend
-    onExecute(query, target, target === "history" ? historyDate : undefined);
+    onExecute(query, target, target === "history" ? historyDate : undefined, conditions);
     onClose();
-  }, [analysis.isValid, query, target, historyDate, onExecute, onClose]);
+  }, [analysis.isValid, analysis.ast, query, target, historyDate, onExecute, onClose]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     // Ctrl/Cmd + Enter to execute

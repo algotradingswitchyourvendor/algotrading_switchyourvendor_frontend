@@ -243,8 +243,8 @@ function PresetCard({
           display: "block",
         }}
       >
-        {preset.conditions.length} condition
-        {preset.conditions.length !== 1 ? "s" : ""}
+        {(preset.request?.conditions || (preset as any).conditions)?.length || 0} condition
+        {(preset.request?.conditions || (preset as any).conditions)?.length !== 1 ? "s" : ""}
       </span>
     </div>
   );
@@ -561,11 +561,12 @@ export default function ScannerPage() {
   };
 
   const applyPreset = (preset: ScannerPreset) => {
-    setConditions(preset.conditions);
+    const conditions = preset.request?.conditions || (preset as any).conditions || [];
+    setConditions(conditions);
     setLoading(true);
     scanMutation.mutate({
       mode: "live",
-      conditions: preset.conditions,
+      conditions: conditions,
       sort_by: sorting[0]?.id || "day_change_pct",
       sort_order: sorting[0]?.desc ? "desc" : "asc",
       page: 1,
@@ -596,9 +597,15 @@ export default function ScannerPage() {
 
   const queryMutation = useMutation({
     mutationFn: async (request: import("@/types/scanner").UnifiedQueryRequest) => {
-      const { runQuery } = await import("@/services/data");
-      const res = await runQuery(request);
-      return { data: res.data || [], meta: (res as any).meta, request };
+      if (request.execution_target === "live") {
+        const { UnifiedQueryEngine } = await import("@/utils/queryEngine");
+        const res = UnifiedQueryEngine.execute(stocks, request);
+        return { data: res.results, meta: res.meta as any, request };
+      } else {
+        const { runQuery } = await import("@/services/data");
+        const res = await runQuery(request);
+        return { data: res.data || [], meta: (res as any).meta, request };
+      }
     },
     onSuccess: (result) => {
       setResults(result.data, result.meta || {
@@ -619,16 +626,17 @@ export default function ScannerPage() {
   });
 
   const handleQueryBuilderExecute = useCallback(
-    (queryText: string, target: "live" | "history", date?: string) => {
+    (queryText: string, target: "live" | "history", date?: string, conditions?: import("@/types/scanner").ScannerCondition[]) => {
       queryMutation.mutate({
         query_text: queryText,
+        conditions: conditions,
         execution_target: target,
         date: date,
         page: 1,
         page_size: 5000, // Fetch up to the backend limit for local pagination
       });
     },
-    [queryMutation, pageSize]
+    [queryMutation]
   );
 
   return (
