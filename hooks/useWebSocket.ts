@@ -20,7 +20,7 @@ import type { StockRecord } from "@/types/stock";
 
 const WS_URL =
   typeof window !== "undefined"
-    ? `ws://${window.location.hostname}:8000/api/v1/ws`
+    ? `wss://${window.location.hostname}:8000/api/v1/ws`
     : "";
 
 interface WSMessage {
