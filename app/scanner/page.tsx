@@ -591,9 +591,15 @@ export default function ScannerPage() {
 
   const queryMutation = useMutation({
     mutationFn: async (request: import("@/types/scanner").UnifiedQueryRequest) => {
-      const { runQuery } = await import("@/services/data");
-      const res = await runQuery(request);
-      return { data: res.data || [], meta: (res as any).meta, request };
+      if (request.execution_target === "live") {
+        const { UnifiedQueryEngine } = await import("@/utils/queryEngine");
+        const res = UnifiedQueryEngine.execute(stocks, request);
+        return { data: res.results, meta: res.meta as any, request };
+      } else {
+        const { runQuery } = await import("@/services/data");
+        const res = await runQuery(request);
+        return { data: res.data || [], meta: (res as any).meta, request };
+      }
     },
     onSuccess: (result) => {
       setResults(result.data, result.meta || {
