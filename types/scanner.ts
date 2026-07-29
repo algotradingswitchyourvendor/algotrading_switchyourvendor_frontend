@@ -10,8 +10,14 @@ export interface ScannerGroup {
   logical: "AND" | "OR";
 }
 
+export interface ExpressionCondition {
+  type: "expression";
+  expression: string;
+}
+
 export interface UnifiedQueryRequest {
   conditions?: ScannerCondition[];
+  expression_conditions?: ExpressionCondition[];
   groups?: ScannerGroup[];
   query_text?: string;
   

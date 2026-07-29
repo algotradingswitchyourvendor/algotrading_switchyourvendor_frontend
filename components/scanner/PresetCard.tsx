@@ -25,11 +25,13 @@ export function PresetCard({
   preset,
   onSelect,
   onEdit,
+  onEditConditions,
   onDelete,
 }: {
   preset: ScannerPreset;
   onSelect: (preset: ScannerPreset) => void;
   onEdit?: (preset: ScannerPreset) => void;
+  onEditConditions?: (preset: ScannerPreset) => void;
   onDelete?: (preset: ScannerPreset) => void;
 }) {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -175,7 +177,34 @@ export function PresetCard({
                     onMouseOut={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
                   >
                     <Edit2 size={12} />
-                    <span>Rename / Edit</span>
+                    Edit Details
+                  </button>
+                )}
+                {onEditConditions && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setIsMenuOpen(false);
+                      onEditConditions(preset);
+                    }}
+                    style={{
+                      background: "transparent",
+                      border: "none",
+                      padding: "var(--sp-2) var(--sp-3)",
+                      textAlign: "left",
+                      fontSize: 12,
+                      color: "var(--text-primary)",
+                      cursor: "pointer",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "var(--sp-2)",
+                      borderBottom: onDelete ? "1px solid var(--border-light)" : "none",
+                    }}
+                    onMouseOver={(e) => (e.currentTarget.style.backgroundColor = "var(--bg-tertiary)")}
+                    onMouseOut={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
+                  >
+                    <Zap size={12} />
+                    Edit Conditions
                   </button>
                 )}
                 {onDelete && (

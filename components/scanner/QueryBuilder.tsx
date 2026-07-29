@@ -35,6 +35,9 @@ interface QueryBuilderProps {
   hideTargetSelector?: boolean;
   storeHook?: typeof useColumnStore;
   initialQuery?: string;
+  showPresetControls?: boolean;
+  onUpdatePreset?: (query: string, conditions: ScannerCondition[]) => void;
+  onSaveAsNew?: (query: string, conditions: ScannerCondition[]) => void;
 }
 
 const EXAMPLE_QUERIES = [
@@ -60,7 +63,17 @@ const OPERATOR_BUTTONS = [
   { label: "(  )", insert: "(" },
 ];
 
-export function QueryBuilder({ isOpen, onClose, onExecute, hideTargetSelector, storeHook, initialQuery }: QueryBuilderProps) {
+export function QueryBuilder({ 
+  isOpen, 
+  onClose, 
+  onExecute, 
+  hideTargetSelector, 
+  storeHook, 
+  initialQuery,
+  showPresetControls,
+  onUpdatePreset,
+  onSaveAsNew
+}: QueryBuilderProps) {
   const [query, setQuery] = useState(initialQuery || "");
   const [target, setTarget] = useState<"live" | "history">(hideTargetSelector ? "history" : "live");
   const [historyDate, setHistoryDate] = useState("");
@@ -250,6 +263,32 @@ export function QueryBuilder({ isOpen, onClose, onExecute, hideTargetSelector, s
                   <Eraser size={13} />
                   Clear
                 </button>
+                {showPresetControls ? (
+                  <>
+                    <button
+                      className="btn btn-secondary"
+                      onClick={() => {
+                        if (!analysis.isValid) return;
+                        const conditions = astToConditions(analysis.ast);
+                        onUpdatePreset?.(query, conditions);
+                      }}
+                      disabled={!analysis.isValid}
+                    >
+                      Update Preset
+                    </button>
+                    <button
+                      className="btn btn-secondary"
+                      onClick={() => {
+                        if (!analysis.isValid) return;
+                        const conditions = astToConditions(analysis.ast);
+                        onSaveAsNew?.(query, conditions);
+                      }}
+                      disabled={!analysis.isValid}
+                    >
+                      Save as New
+                    </button>
+                  </>
+                ) : null}
                 <button
                   className="btn btn-primary"
                   onClick={handleExecute}
