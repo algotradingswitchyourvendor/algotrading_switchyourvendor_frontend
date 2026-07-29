@@ -90,30 +90,24 @@ export const useScannerStore = create<ScannerState>((set, get) => ({
       liveUpdateCount: 0,
     }),
 
-  executeLive: async (stocks: StockRecord[], request: UnifiedQueryRequest) => {
+  executeLive: (stocks: StockRecord[], request: UnifiedQueryRequest) => {
     const { results } = get();
-    const { runQuery } = await import("@/services/data");
+    const { UnifiedQueryEngine } = require("@/utils/queryEngine"); // lazy load to avoid circular deps if any
     
-    try {
-      const res = await runQuery(request);
-      const newSlice = res.data || [];
-      const meta = (res as any).meta;
-      
-      // Deep compare to prevent unnecessary rerenders
-      const isDifferent = newSlice.length !== results.length || 
-                          newSlice.some((row: StockRecord, i: number) => row.symbol !== results[i]?.symbol);
-  
-      set((state) => ({
-        liveUpdateCount: state.liveUpdateCount + 1,
-        ...(isDifferent && {
-          results: newSlice,
-          meta: meta || state.meta,
-          lastUpdated: new Date(),
-        })
-      }));
-    } catch (e) {
-      console.error("Live execution failed", e);
-    }
+    const { results: newSlice, meta } = UnifiedQueryEngine.execute(stocks, request);
+    
+    // Deep compare to prevent unnecessary rerenders
+    const isDifferent = newSlice.length !== results.length || 
+                        newSlice.some((row: StockRecord, i: number) => row !== results[i]);
+
+    set((state) => ({
+      liveUpdateCount: state.liveUpdateCount + 1,
+      ...(isDifferent && {
+        results: newSlice,
+        meta,
+        lastUpdated: new Date(),
+      })
+    }));
   },
 
   setActiveRequest: (request) => set({ activeRequest: request }),
