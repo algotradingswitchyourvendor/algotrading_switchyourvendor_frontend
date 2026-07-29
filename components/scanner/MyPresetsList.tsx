@@ -10,9 +10,10 @@ import { DeletePresetModal } from "@/components/scanner/DeletePresetModal";
 interface MyPresetsListProps {
   scannerType?: "live" | "historical";
   onSelect: (preset: ScannerPreset) => void;
+  onEditConditions?: (preset: ScannerPreset) => void;
 }
 
-export function MyPresetsList({ scannerType, onSelect }: MyPresetsListProps) {
+export function MyPresetsList({ scannerType, onSelect, onEditConditions }: MyPresetsListProps) {
   const { data: presets, isLoading } = usePresets(scannerType);
   const markUsedMutation = useMarkPresetUsed();
   
@@ -61,6 +62,7 @@ export function MyPresetsList({ scannerType, onSelect }: MyPresetsListProps) {
               preset={preset}
               onSelect={handleSelect}
               onEdit={(p) => setEditingPreset(p)}
+              onEditConditions={onEditConditions}
               onDelete={(p) => setDeletingPreset(p)}
             />
           ))}

@@ -1,5 +1,5 @@
 /**
- * Query Engine Parser â€” Recursive descent parser producing an AST.
+ * Query Engine Parser — Recursive descent parser producing an AST.
  *
  * Grammar:
  *   Expression  := OrExpr
@@ -17,7 +17,7 @@
 import { TokenType, type Token, type TokenizeResult } from "./tokenizer";
 import type { ScannerCondition } from "@/types/scanner";
 
-/* â”€â”€ AST Node Types â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* ── AST Node Types ────────────────────────────────────────────────────────── */
 
 export type ASTNode =
   | BinaryOpNode
@@ -27,7 +27,8 @@ export type ASTNode =
   | ContainsNode
   | NumberLiteralNode
   | StringLiteralNode
-  | IdentifierNode;
+  | IdentifierNode
+  | FunctionCallNode;
 
 export interface BinaryOpNode {
   type: "BinaryOp";
@@ -77,7 +78,13 @@ export interface IdentifierNode {
   name: string;
 }
 
-/* â”€â”€ Parse Result â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+export interface FunctionCallNode {
+  type: "FunctionCall";
+  name: string;
+  args: ASTNode[];
+}
+
+/* ── Parse Result ──────────────────────────────────────────────────────────── */
 
 export interface ParseResult {
   ast: ASTNode | null;
@@ -90,7 +97,7 @@ export interface ParseError {
   length: number;
 }
 
-/* â”€â”€ Parser â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* ── Parser ────────────────────────────────────────────────────────────────── */
 
 export function parse(tokenResult: TokenizeResult): ParseResult {
   const { tokens, errors: tokenErrors } = tokenResult;
@@ -146,7 +153,7 @@ export function parse(tokenResult: TokenizeResult): ParseResult {
   }
 }
 
-/* â”€â”€ Internal Parser Class â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* ── Internal Parser Class ─────────────────────────────────────────────────── */
 
 class ParserError extends Error {
   position: number;
@@ -196,7 +203,7 @@ class Parser {
     return this.advance();
   }
 
-  /* â”€â”€ Grammar Rules â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+  /* ── Grammar Rules ───────────────────────────────────────────────────────── */
 
   parseExpression(): ASTNode {
     return this.parseOrExpr();
@@ -322,9 +329,27 @@ class Parser {
       return { type: "StringLiteral", value: token.value };
     }
 
-    // Identifier (column name)
+    // Identifier (column name) or Function Call
     if (token.type === TokenType.IDENTIFIER) {
       this.advance();
+      
+      if (this.peek().type === TokenType.LPAREN) {
+        this.advance();
+        const args: ASTNode[] = [];
+        if (this.peek().type !== TokenType.RPAREN) {
+          do {
+            args.push(this.parseExpression());
+            if (this.peek().type === TokenType.COMMA) {
+              this.advance();
+            } else {
+              break;
+            }
+          } while (true);
+        }
+        this.expect(TokenType.RPAREN);
+        return { type: "FunctionCall", name: token.value, args };
+      }
+      
       return { type: "Identifier", name: token.value };
     }
 

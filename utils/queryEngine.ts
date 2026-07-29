@@ -1,5 +1,14 @@
 import type { StockRecord } from "@/types/stock";
 import type { ScannerCondition, UnifiedQueryRequest, QueryResultMeta } from "@/types/scanner";
+import { compileExpression, executeCompiledExpression, CompiledExpression } from "../lib/expression";
+
+export type ExecutionStep = 
+  | { type: "legacy"; condition: ScannerCondition }
+  | { type: "expression"; compiled: CompiledExpression };
+
+export class ExecutionPlan {
+  constructor(public readonly steps: ExecutionStep[]) {}
+}
 
 /**
  * UnifiedQueryEngine — Replicates the backend Pandas translator.py logic in JavaScript.
@@ -10,21 +19,41 @@ import type { ScannerCondition, UnifiedQueryRequest, QueryResultMeta } from "@/t
  * - Exact type coercion matching Pandas `to_numeric(errors='coerce')`.
  */
 export class UnifiedQueryEngine {
+  static compilePlan(request: UnifiedQueryRequest): ExecutionPlan {
+    const steps: ExecutionStep[] = [];
+    
+    if (request.conditions) {
+      for (const cond of request.conditions) {
+        steps.push({ type: "legacy", condition: cond });
+      }
+    }
+
+    if (request.expression_conditions) {
+      for (const expr of request.expression_conditions) {
+        steps.push({ type: "expression", compiled: compileExpression(expr.expression) });
+      }
+    }
+
+    return new ExecutionPlan(steps);
+  }
+
   static execute(
     stocks: StockRecord[],
     request: UnifiedQueryRequest
   ): { results: StockRecord[]; meta: QueryResultMeta } {
     const startTime = performance.now();
+    
+    // Compile plan once before iteration. Syntax errors will intentionally abort here.
+    const plan = this.compilePlan(request);
 
     // 1. Filter
     let filtered = stocks;
-    let conditionsApplied = 0;
+    const conditionsApplied = plan.steps.length;
 
-    if (request.conditions && request.conditions.length > 0) {
+    if (conditionsApplied > 0) {
       filtered = stocks.filter((stock) =>
-        this.evaluateConditions(stock, request.conditions!)
+        this.evaluatePlan(stock, plan)
       );
-      conditionsApplied = request.conditions.length;
     }
 
     const matchedCount = filtered.length;
@@ -83,28 +112,36 @@ export class UnifiedQueryEngine {
     };
   }
 
-  private static evaluateConditions(
+  private static evaluatePlan(
     stock: StockRecord,
-    conditions: ScannerCondition[]
+    plan: ExecutionPlan
   ): boolean {
     let andMask = true;
     const orMasks: boolean[] = [];
 
-    for (const condition of conditions) {
-      const column = condition.column;
-      const operator = condition.operator?.toLowerCase().trim() || "=";
-      const value = condition.value;
-      const logical = (condition.logical || "AND").toUpperCase();
+    for (const step of plan.steps) {
+      if (step.type === "legacy") {
+        const condition = step.condition;
+        const column = condition.column;
+        const operator = condition.operator?.toLowerCase().trim() || "=";
+        const value = condition.value;
+        const logical = (condition.logical || "AND").toUpperCase();
 
-      if (!(column in stock)) {
-        continue;
-      }
+        if (!(column in stock)) {
+          continue;
+        }
 
-      const match = this.evaluateSingle(stock, column, operator, value);
+        const match = this.evaluateSingle(stock, column, operator, value);
 
-      if (logical === "OR") {
-        orMasks.push(match);
+        if (logical === "OR") {
+          orMasks.push(match);
+        } else {
+          andMask = andMask && match;
+        }
       } else {
+        // Expression conditions are implicitly ANDed.
+        // The RowContext is safely compatible with StockRecord.
+        const match = executeCompiledExpression(step.compiled, stock as any);
         andMask = andMask && match;
       }
     }

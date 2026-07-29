@@ -9,6 +9,9 @@ import { Pagination } from "@/components/common/Pagination";
 import { PageSizeSelector } from "@/components/dashboard/PageSizeSelector";
 import { ColumnSelector } from "@/components/dashboard/ColumnSelector";
 import { QueryBuilder } from "@/components/scanner/QueryBuilder";
+import { PresetCard } from "@/components/scanner/PresetCard";
+import { SaveQueryModal } from "@/components/scanner/SaveQueryModal";
+import { MyPresetsList } from "@/components/scanner/MyPresetsList";
 import {
   EmptyState,
   SkeletonTable,
@@ -42,6 +45,7 @@ import {
   Radio,
   Square,
   Sparkles,
+  Save,
 } from "lucide-react";
 
 /* ── Operators ───────────────────────────────────────────────── */
@@ -158,97 +162,7 @@ function ConditionRow({
   );
 }
 
-/* ── Preset Card ─────────────────────────────────────────────── */
 
-function PresetCard({
-  preset,
-  onSelect,
-}: {
-  preset: ScannerPreset;
-  onSelect: (preset: ScannerPreset) => void;
-}) {
-  const nameLower = preset.name.toLowerCase();
-  let Icon = PRESET_ICONS.default;
-  if (nameLower.includes("bull")) Icon = PRESET_ICONS.bullish;
-  else if (nameLower.includes("bear")) Icon = PRESET_ICONS.bearish;
-  else if (nameLower.includes("volume")) Icon = PRESET_ICONS.volume;
-  else if (nameLower.includes("momentum")) Icon = PRESET_ICONS.momentum;
-  else if (nameLower.includes("institution")) Icon = PRESET_ICONS.institutional;
-
-  return (
-    <div
-      role="button"
-      tabIndex={0}
-      onClick={() => onSelect(preset)}
-      className="card"
-      style={{
-        padding: "var(--sp-3) var(--sp-4)",
-        textAlign: "left",
-        cursor: "pointer",
-        minWidth: 160,
-        flex: "0 0 auto",
-        border: "1px solid var(--border-primary)",
-        transition: "all var(--transition-fast)",
-        background: "none",
-        fontFamily: "var(--font-sans)",
-      }}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          onSelect(preset);
-        }
-      }}
-      onMouseOver={(e) => {
-        e.currentTarget.style.borderColor = "var(--color-accent)";
-        e.currentTarget.style.backgroundColor = "var(--color-accent-light)";
-      }}
-      onMouseOut={(e) => {
-        e.currentTarget.style.borderColor = "var(--border-primary)";
-        e.currentTarget.style.backgroundColor = "transparent";
-      }}
-    >
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: "var(--sp-2)",
-          marginBottom: 4,
-        }}
-      >
-        <Icon size={14} style={{ color: "var(--color-accent)", flexShrink: 0 }} />
-        <span
-          style={{
-            fontSize: 12,
-            fontWeight: 600,
-            color: "var(--text-primary)",
-          }}
-        >
-          {preset.name}
-        </span>
-      </div>
-      <p
-        style={{
-          fontSize: 11,
-          color: "var(--text-tertiary)",
-          lineHeight: 1.4,
-        }}
-      >
-        {preset.description}
-      </p>
-      <span
-        style={{
-          fontSize: 10,
-          color: "var(--text-muted)",
-          marginTop: 4,
-          display: "block",
-        }}
-      >
-        {(preset.request?.conditions || (preset as any).conditions)?.length || 0} condition
-        {(preset.request?.conditions || (preset as any).conditions)?.length !== 1 ? "s" : ""}
-      </span>
-    </div>
-  );
-}
 
 /* ── Active Filter Chips ─────────────────────────────────────── */
 
@@ -414,6 +328,8 @@ export default function ScannerPage() {
   ]);
   const [currentPage, setCurrentPage] = useState(1);
   const [queryBuilderOpen, setQueryBuilderOpen] = useState(false);
+  const [initialBuilderQuery, setInitialBuilderQuery] = useState("");
+  const [saveModalOpen, setSaveModalOpen] = useState(false);
   const [sorting, setSorting] = useState<import("@tanstack/react-table").SortingState>([{ id: "day_change_pct", desc: true }]);
   const tableRef = useRef<DynamicTableRef>(null);
 
@@ -436,6 +352,11 @@ export default function ScannerPage() {
     setLoading,
     setError,
     reset: resetScanner,
+    loadedPresetId,
+    loadedPresetName,
+    isModified,
+    setLoadedPreset,
+    checkModified,
   } = useScannerStore();
 
   const { stocks, version } = useMarketStore();
@@ -521,6 +442,17 @@ export default function ScannerPage() {
     }
   }, [isLive, activeRequest, wsStatus, sendMessage]);
 
+  const evaluateModification = (nextConditions: ScannerCondition[]) => {
+    checkModified({
+      execution_target: "live",
+      conditions: nextConditions,
+      sort_by: sorting[0]?.id || "day_change_pct",
+      sort_order: sorting[0]?.desc ? "desc" : "asc",
+      page: 1,
+      page_size: pageSize || 5000,
+    });
+  };
+
   const handleConditionChange = useCallback(
     (index: number, field: keyof ScannerCondition, value: string | number) => {
       setConditions((prev) => {
@@ -531,17 +463,26 @@ export default function ScannerPage() {
         } else {
           next[index] = { ...next[index], [field]: value };
         }
+        setTimeout(() => evaluateModification(next), 0);
         return next;
       });
     },
-    []
+    [checkModified, sorting, pageSize]
   );
 
   const addCondition = () =>
-    setConditions((prev) => [...prev, { ...DEFAULT_CONDITION }]);
+    setConditions((prev) => {
+      const next = [...prev, { ...DEFAULT_CONDITION }];
+      setTimeout(() => evaluateModification(next), 0);
+      return next;
+    });
 
   const removeCondition = (index: number) =>
-    setConditions((prev) => prev.filter((_, i) => i !== index));
+    setConditions((prev) => {
+      const next = prev.filter((_, i) => i !== index);
+      setTimeout(() => evaluateModification(next), 0);
+      return next;
+    });
 
   const resetConditions = () => {
     setConditions([{ ...DEFAULT_CONDITION }]);
@@ -570,17 +511,61 @@ export default function ScannerPage() {
   };
 
   const applyPreset = (preset: ScannerPreset) => {
-    const conditions = preset.request?.conditions || (preset as any).conditions || [];
-    setConditions(conditions);
+    setLoadedPreset(preset);
+
+    const presetConditions = preset.request?.conditions || (preset as any).conditions || [];
+    
+    if (presetConditions && presetConditions.length > 0) {
+      setConditions(presetConditions);
+    } else {
+      setConditions([{ ...DEFAULT_CONDITION }]);
+    }
+
+    if (preset.request) {
+      setActiveRequest(preset.request);
+      
+      if (preset.request.query_text) {
+        setInitialBuilderQuery(preset.request.query_text);
+        setQueryBuilderOpen(true);
+      }
+    }
+
+    if (preset.sorting) {
+      setSorting(preset.sorting);
+    }
+    if (preset.page_size) {
+      useColumnStore.getState().setPageSize(preset.page_size);
+    }
+    if (preset.selected_columns) {
+      useColumnStore.getState().setVisibleColumns(preset.selected_columns);
+    }
+
     setLoading(true);
     scanMutation.mutate({
       mode: "live",
-      conditions: conditions,
-      sort_by: sorting[0]?.id || "day_change_pct",
-      sort_order: sorting[0]?.desc ? "desc" : "asc",
+      conditions: presetConditions,
+      sort_by: preset.sorting?.[0]?.id || sorting[0]?.id || "day_change_pct",
+      sort_order: preset.sorting?.[0]?.desc !== undefined ? (preset.sorting[0].desc ? "desc" : "asc") : (sorting[0]?.desc ? "desc" : "asc"),
       page: 1,
       page_size: 5000,
     });
+  };
+
+  const handleEditConditions = (preset: ScannerPreset) => {
+    setLoadedPreset(preset);
+    const conditions = preset.request?.conditions || (preset as any).conditions || [];
+    if (conditions.length > 0) {
+      setConditions(conditions);
+    } else {
+      setConditions([{ ...DEFAULT_CONDITION }]);
+    }
+    
+    let qText = preset.request?.query_text;
+    if (!qText && conditions.length > 0) {
+      qText = conditions.map((c: ScannerCondition) => `${c.column} ${c.operator} ${c.value}`).join(" AND ");
+    }
+    setInitialBuilderQuery(qText || "");
+    setQueryBuilderOpen(true);
   };
 
   // Unsubscribe on unmount
@@ -648,6 +633,32 @@ export default function ScannerPage() {
     [queryMutation]
   );
 
+  const handleUpdatePresetFromBuilder = useCallback((queryText: string, conditions: ScannerCondition[]) => {
+    const request: import("@/types/scanner").UnifiedQueryRequest = {
+      query_text: queryText,
+      conditions: conditions,
+      execution_target: "live",
+      page: 1,
+      page_size: pageSize || 5000,
+    };
+    setActiveRequest(request);
+    checkModified(request);
+    setSaveModalOpen(true);
+  }, [pageSize, checkModified]);
+
+  const handleSaveAsNewFromBuilder = useCallback((queryText: string, conditions: ScannerCondition[]) => {
+    const request: import("@/types/scanner").UnifiedQueryRequest = {
+      query_text: queryText,
+      conditions: conditions,
+      execution_target: "live",
+      page: 1,
+      page_size: pageSize || 5000,
+    };
+    setActiveRequest(request);
+    resetScanner(); // Resets loaded preset so modal opens in 'new' mode
+    setSaveModalOpen(true);
+  }, [pageSize, resetScanner]);
+
   return (
     <div style={{ display: "flex", flexDirection: "column" }}>
       <TopNavigation title="Market Scanner MoM" />
@@ -657,6 +668,28 @@ export default function ScannerPage() {
         isOpen={queryBuilderOpen}
         onClose={() => setQueryBuilderOpen(false)}
         onExecute={handleQueryBuilderExecute}
+        initialQuery={initialBuilderQuery}
+        showPresetControls={!!loadedPresetId}
+        onUpdatePreset={handleUpdatePresetFromBuilder}
+        onSaveAsNew={handleSaveAsNewFromBuilder}
+      />
+
+      <SaveQueryModal 
+        isOpen={saveModalOpen} 
+        onClose={() => setSaveModalOpen(false)} 
+        request={activeRequest}
+        scannerType="live"
+        sorting={sorting}
+        pageSize={pageSize}
+        selectedColumns={useColumnStore.getState().visibleColumns}
+        loadedPresetId={loadedPresetId}
+        loadedPresetName={loadedPresetName}
+        isModified={isModified}
+        onUpdateSuccess={() => {
+          if (activeRequest) {
+            checkModified(activeRequest);
+          }
+        }}
       />
 
       <motion.div
@@ -666,10 +699,40 @@ export default function ScannerPage() {
         className="app-content"
         style={{ padding: "var(--sp-6)" }}
       >
+        {loadedPresetName && (
+          <div style={{ 
+            padding: "var(--sp-3) var(--sp-4)", 
+            backgroundColor: "var(--bg-secondary)", 
+            border: "1px solid var(--border-light)",
+            borderRadius: "var(--radius-md)",
+            marginBottom: "var(--sp-5)",
+            display: "flex",
+            alignItems: "center",
+            gap: "var(--sp-2)",
+            fontSize: 13
+          }}>
+            <span style={{ color: "var(--text-secondary)" }}>Current Preset:</span>
+            <span style={{ fontWeight: 600, color: "var(--text-primary)" }}>{loadedPresetName}</span>
+            {isModified && (
+              <span style={{ 
+                color: "var(--color-warning)", 
+                display: "flex", 
+                alignItems: "center", 
+                gap: 4,
+                marginLeft: "var(--sp-2)",
+                fontSize: 12,
+                fontWeight: 500
+              }}>
+                ● Modified
+              </span>
+            )}
+          </div>
+        )}
+
         <div style={{ display: "flex", flexDirection: "column", gap: "var(--sp-5)" }}>
           {/* Presets */}
           {presetsQuery.data && presetsQuery.data.length > 0 && (
-            <div>
+            <div style={{ marginBottom: "var(--sp-2)" }}>
               <h3
                 style={{
                   fontSize: 11,
@@ -695,11 +758,14 @@ export default function ScannerPage() {
                     key={preset.id}
                     preset={preset}
                     onSelect={applyPreset}
+                    onEditConditions={handleEditConditions}
                   />
                 ))}
               </div>
             </div>
           )}
+
+          <MyPresetsList scannerType="live" onSelect={applyPreset} onEditConditions={handleEditConditions} />
 
           {/* Condition Builder */}
           <div className="card" style={{ padding: "var(--sp-5)" }}>
@@ -779,6 +845,15 @@ export default function ScannerPage() {
                 >
                   <Sparkles size={13} />
                   Create Screener
+                </button>
+                <button
+                  className="btn btn-secondary"
+                  onClick={() => setSaveModalOpen(true)}
+                  title="Save current conditions as a preset"
+                  disabled={!activeRequest}
+                >
+                  <Save size={13} />
+                  Save Query
                 </button>
                 <button
                   className="btn btn-primary"
