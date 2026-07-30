@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useRef, useMemo, useEffect } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, keepPreviousData } from "@tanstack/react-query";
+import type { SortingState } from "@tanstack/react-table";
 import { motion } from "framer-motion";
 import { TopNavigation } from "@/components/layout/TopNavigation";
 import { DynamicTable, type DynamicTableRef } from "@/components/dashboard/DynamicTable";
@@ -71,6 +72,7 @@ export default function HistoryPage() {
   });
   const { pageSize } = useColumnStore();
   const [currentPage, setCurrentPage] = useState(1);
+  const [sorting, setSorting] = useState<SortingState>([]);
   const tableRef = useRef<DynamicTableRef>(null);
 
   // Available dates
@@ -90,6 +92,7 @@ export default function HistoryPage() {
       appliedFilters.symbol,
       appliedFilters.startTime,
       appliedFilters.endTime,
+      sorting,
     ],
     queryFn: async () => {
       const res = await fetchHistory({
@@ -97,11 +100,14 @@ export default function HistoryPage() {
         symbol: appliedFilters.symbol || undefined,
         start_time: appliedFilters.startTime || undefined,
         end_time: appliedFilters.endTime || undefined,
+        sort_by: sorting[0]?.id || undefined,
+        sort_order: sorting[0]?.desc ? "desc" : "asc",
         page: 1,
         page_size: 1000,
       });
       return res.data || [];
     },
+    placeholderData: keepPreviousData,
     enabled: !!appliedFilters.date,
   });
 
@@ -361,8 +367,7 @@ export default function HistoryPage() {
             </div>
           )}
 
-          {/* Table */}
-          {historyQuery.isLoading ? (
+          {historyQuery.isLoading && allData.length === 0 ? (
             <div style={{ display: "flex", flexDirection: "column", gap: "var(--sp-4)" }}>
               <div
                 className="card"
@@ -404,6 +409,10 @@ export default function HistoryPage() {
                 columnsOverride={visibleColumnsOverride}
                 metadataOverride={metadataOverride}
                 columnOrderOverride={visibleColumnsOverride}
+                sorting={sorting}
+                onSortingChange={setSorting}
+                manualSorting={true}
+                isFetching={historyQuery.isFetching}
               />
               <Pagination
                 currentPage={currentPage}

@@ -339,9 +339,10 @@ export default function ScannerLTDPage() {
   ]);
   const [currentPage, setCurrentPage] = useState(1);
   const [queryBuilderOpen, setQueryBuilderOpen] = useState(false);
+  const [initialBuilderQuery, setInitialBuilderQuery] = useState("");
   const [saveModalOpen, setSaveModalOpen] = useState(false);
   const [activeRequest, setActiveRequest] = useState<import("@/types/scanner").UnifiedQueryRequest | null>(null);
-  const [sorting, setSorting] = useState<import("@tanstack/react-table").SortingState>([{ id: "day_change_pct", desc: true }]);
+  const [sorting, setSorting] = useState<import("@tanstack/react-table").SortingState>([]);
   const tableRef = useRef<DynamicTableRef>(null);
 
   const [selectedDate, setSelectedDate] = useState<string>("");
@@ -450,6 +451,7 @@ export default function ScannerLTDPage() {
 
   const resetConditions = () => {
     setConditions([{ ...DEFAULT_CONDITION }]);
+    setSorting([]);
     resetScanner();
   };
 
@@ -459,17 +461,21 @@ export default function ScannerLTDPage() {
 
   const runScan = () => {
     const valid = conditions.filter((c) => c.column && c.value !== "");
-    if (!valid.length) return;
+    if (!valid.length && !initialBuilderQuery) return;
     setLoading(true);
-    queryMutation.mutate({
+    
+    const request: import("@/types/scanner").UnifiedQueryRequest = {
       execution_target: "history", 
       date: selectedDate,
-      conditions: valid,
-      sort_by: sorting[0]?.id || "day_change_pct",
-      sort_order: sorting[0]?.desc ? "desc" : "asc",
+      conditions: valid.length > 0 ? valid : undefined,
+      query_text: !valid.length && initialBuilderQuery ? initialBuilderQuery : undefined,
+      sort_by: sorting[0]?.id || undefined,
+      sort_order: sorting[0] ? (sorting[0].desc ? "desc" : "asc") : undefined,
       page: 1,
       page_size: 5000,
-    });
+    };
+    
+    queryMutation.mutate(request);
   };
 
   const applyPreset = (preset: ScannerPreset) => {
@@ -509,11 +515,23 @@ export default function ScannerLTDPage() {
     return () => {};
   }, []);
 
-  // Trigger runScan when sorting changes if it has run before
+  // Trigger scan when sorting changes if it has run before
   useEffect(() => {
-    if (hasRun && !isLive) {
-      runScan();
+    if (hasRun) {
+      if (activeRequest) {
+        setLoading(true);
+        queryMutation.mutate({
+          ...activeRequest,
+          sort_by: sorting[0]?.id || undefined,
+          sort_order: sorting[0] ? (sorting[0].desc ? "desc" : "asc") : undefined,
+          page: 1,
+          page_size: 5000,
+        });
+      } else {
+        runScan();
+      }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sorting]);
 
   const hasValidConditions = conditions.some(
@@ -558,6 +576,8 @@ export default function ScannerLTDPage() {
         query_text: queryText,
         execution_target: target,
         date: date || selectedDate,
+        sort_by: sorting[0]?.id || undefined,
+        sort_order: sorting[0] ? (sorting[0].desc ? "desc" : "asc") : undefined,
         page: 1,
         page_size: 5000,
       });
@@ -848,19 +868,11 @@ export default function ScannerLTDPage() {
           )}
 
           {/* State rendering */}
-          {queryMutation.isPending ? (
-            <SkeletonTable rows={10} cols={8} />
-          ) : queryMutation.isError ? (
+          {queryMutation.isError ? (
             <ErrorState
               title="Scan Failed"
               message="The scanner encountered an error. Please check your conditions and try again."
               onRetry={runScan}
-            />
-          ) : hasRun && results.length === 0 ? (
-            <EmptyState
-              icon={ScanSearch}
-              title="No stocks matched"
-              message="Try adjusting your filters or selecting a different preset."
             />
           ) : results.length > 0 ? (
             <>
@@ -876,6 +888,7 @@ export default function ScannerLTDPage() {
                 onSortingChange={setSorting}
                 manualSorting={true}
                 storeHook={useColumnLTDStore}
+                isFetching={queryMutation.isPending}
               />
               <Pagination
                 currentPage={currentPage}
@@ -886,6 +899,14 @@ export default function ScannerLTDPage() {
                 onPageSizeChange={() => { }}
               />
             </>
+          ) : queryMutation.isPending ? (
+            <SkeletonTable rows={10} cols={8} />
+          ) : hasRun && results.length === 0 ? (
+            <EmptyState
+              icon={ScanSearch}
+              title="No stocks matched"
+              message="Try adjusting your filters or selecting a different preset."
+            />
           ) : hasRun ? (
             <EmptyState
               icon={ScanSearch}
