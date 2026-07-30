@@ -330,7 +330,7 @@ export default function ScannerPage() {
   const [queryBuilderOpen, setQueryBuilderOpen] = useState(false);
   const [initialBuilderQuery, setInitialBuilderQuery] = useState("");
   const [saveModalOpen, setSaveModalOpen] = useState(false);
-  const [sorting, setSorting] = useState<import("@tanstack/react-table").SortingState>([{ id: "day_change_pct", desc: true }]);
+  const [sorting, setSorting] = useState<import("@tanstack/react-table").SortingState>([]);
   const tableRef = useRef<DynamicTableRef>(null);
 
   // Scanner store for results and live state
@@ -391,8 +391,8 @@ export default function ScannerPage() {
   });
 
   const scanMutation = useMutation({
-    mutationFn: async (request: ScannerRequest) => {
-      const res = await runScanner(request);
+    mutationFn: async (request: import("@/types/scanner").UnifiedQueryRequest) => {
+      const res = await runScanner(request as any);
       return { data: res.data || [], meta: (res as any).meta, request };
     },
     onSuccess: (result) => {
@@ -408,16 +408,19 @@ export default function ScannerPage() {
 
       // Enable live mode and store the request for the WebSocket effect
       const validConditions = conditions.filter((c) => c.column && c.value !== "");
-      if (validConditions.length > 0) {
-        setActiveConditions(validConditions);
-        setLive(true);
+      if (validConditions.length > 0 || result.request.query_text) {
+        if (validConditions.length > 0) {
+          setActiveConditions(validConditions);
+        }
+        
+        if (result.request.execution_target === "live") {
+          setLive(true);
+        }
+        
         setActiveRequest({
-          execution_target: "live",
-          conditions: validConditions,
-          sort_by: result.request.sort_by,
-          sort_order: result.request.sort_order,
-          page: result.request.page,
-          page_size: result.request.page_size,
+          ...result.request,
+          sort_by: result.request.sort_by || sorting[0]?.id || undefined,
+          sort_order: result.request.sort_order || (sorting[0] ? (sorting[0].desc ? "desc" : "asc") : undefined),
         });
       }
     },
@@ -446,8 +449,8 @@ export default function ScannerPage() {
     checkModified({
       execution_target: "live",
       conditions: nextConditions,
-      sort_by: sorting[0]?.id || "day_change_pct",
-      sort_order: sorting[0]?.desc ? "desc" : "asc",
+      sort_by: sorting[0]?.id || undefined,
+      sort_order: sorting[0] ? (sorting[0].desc ? "desc" : "asc") : undefined,
       page: 1,
       page_size: pageSize || 5000,
     });
@@ -486,6 +489,7 @@ export default function ScannerPage() {
 
   const resetConditions = () => {
     setConditions([{ ...DEFAULT_CONDITION }]);
+    setSorting([]);
     resetScanner();
     // Unsubscribe from live scanner updates
     sendMessage({ type: "unsubscribe_scanner" });
@@ -498,16 +502,20 @@ export default function ScannerPage() {
 
   const runScan = () => {
     const valid = conditions.filter((c) => c.column && c.value !== "");
-    if (!valid.length) return;
+    if (!valid.length && !initialBuilderQuery) return;
     setLoading(true);
-    scanMutation.mutate({
-      mode: "live",
-      conditions: valid,
-      sort_by: sorting[0]?.id || "day_change_pct",
-      sort_order: sorting[0]?.desc ? "desc" : "asc",
+    
+    const request: import("@/types/scanner").UnifiedQueryRequest = {
+      execution_target: "live",
+      conditions: valid.length > 0 ? valid : undefined,
+      query_text: !valid.length && initialBuilderQuery ? initialBuilderQuery : undefined,
+      sort_by: sorting[0]?.id || undefined,
+      sort_order: sorting[0] ? (sorting[0].desc ? "desc" : "asc") : undefined,
       page: 1,
-      page_size: 5000, // Fetch up to the backend limit for local pagination
-    });
+      page_size: 5000,
+    };
+    
+    queryMutation.mutate(request);
   };
 
   const applyPreset = (preset: ScannerPreset) => {
@@ -541,11 +549,12 @@ export default function ScannerPage() {
     }
 
     setLoading(true);
-    scanMutation.mutate({
-      mode: "live",
-      conditions: presetConditions,
-      sort_by: preset.sorting?.[0]?.id || sorting[0]?.id || "day_change_pct",
-      sort_order: preset.sorting?.[0]?.desc !== undefined ? (preset.sorting[0].desc ? "desc" : "asc") : (sorting[0]?.desc ? "desc" : "asc"),
+    queryMutation.mutate({
+      execution_target: "live",
+      conditions: presetConditions.length > 0 ? presetConditions : undefined,
+      query_text: preset.request?.query_text || undefined,
+      sort_by: preset.sorting?.[0]?.id || sorting[0]?.id || undefined,
+      sort_order: preset.sorting?.[0]?.desc !== undefined ? (preset.sorting[0].desc ? "desc" : "asc") : (sorting[0] ? (sorting[0].desc ? "desc" : "asc") : undefined),
       page: 1,
       page_size: 5000,
     });
@@ -576,11 +585,31 @@ export default function ScannerPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Trigger runScan when sorting changes if it has run before
+  // Trigger scan when sorting changes if it has run before
   useEffect(() => {
-    if (hasRun && !isLive) {
-      runScan();
+    if (hasRun) {
+      if (isLive && activeRequest) {
+        // If live, updating activeRequest triggers a new websocket subscription
+        setActiveRequest({
+          ...activeRequest,
+          sort_by: sorting[0]?.id || undefined,
+          sort_order: sorting[0] ? (sorting[0].desc ? "desc" : "asc") : undefined,
+        });
+      } else if (activeRequest) {
+        // If not live, manually fire the query
+        setLoading(true);
+        queryMutation.mutate({
+          ...activeRequest,
+          sort_by: sorting[0]?.id || undefined,
+          sort_order: sorting[0] ? (sorting[0].desc ? "desc" : "asc") : undefined,
+          page: 1,
+          page_size: 5000,
+        });
+      } else {
+        runScan();
+      }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sorting]);
 
   const hasValidConditions = conditions.some(
@@ -620,6 +649,8 @@ export default function ScannerPage() {
         conditions: conditions,
         execution_target: target,
         date: date,
+        sort_by: sorting[0]?.id || undefined,
+        sort_order: sorting[0] ? (sorting[0].desc ? "desc" : "asc") : undefined,
         page: 1,
         page_size: 5000, // Fetch up to the backend limit for local pagination
       });
@@ -906,9 +937,7 @@ export default function ScannerPage() {
             </div>
           )}
 
-          {scanMutation.isPending || scannerLoading ? (
-            <SkeletonTable rows={6} cols={6} />
-          ) : scanMutation.isError ? (
+          {scanMutation.isError || queryMutation.isError ? (
             <ErrorState
               title="Scan Failed"
               message="The scanner encountered an error. Please check your conditions and try again."
@@ -927,6 +956,7 @@ export default function ScannerPage() {
                 sorting={sorting}
                 onSortingChange={setSorting}
                 manualSorting={true}
+                isFetching={scanMutation.isPending || queryMutation.isPending || scannerLoading}
               />
               <Pagination
                 currentPage={currentPage}
@@ -936,6 +966,8 @@ export default function ScannerPage() {
                 onPageSizeChange={() => {}}
               />
             </>
+          ) : scanMutation.isPending || queryMutation.isPending || scannerLoading ? (
+            <SkeletonTable rows={6} cols={6} />
           ) : hasRun ? (
             <EmptyState
               icon={ScanSearch}

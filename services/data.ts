@@ -71,6 +71,8 @@ export interface HistoryParams {
   end_time?: string;
   page?: number;
   page_size?: number;
+  sort_by?: string;
+  sort_order?: "asc" | "desc";
 }
 
 export async function fetchHistory(params: HistoryParams = {}) {
@@ -81,6 +83,8 @@ export async function fetchHistory(params: HistoryParams = {}) {
   if (params.end_time) queryParams.end_time = params.end_time;
   if (params.page) queryParams.page = String(params.page);
   if (params.page_size) queryParams.page_size = String(params.page_size);
+  if (params.sort_by) queryParams.sort_by = params.sort_by;
+  if (params.sort_order) queryParams.sort_order = params.sort_order;
 
   return api.get<StockRecord[]>(ENDPOINTS.HISTORY, queryParams, {
     timeout: 120000, // 2 minutes for large parquet downloads

@@ -272,6 +272,7 @@ interface DynamicTableProps {
   sorting?: SortingState;
   onSortingChange?: React.Dispatch<React.SetStateAction<SortingState>> | ((updater: import("@tanstack/react-table").Updater<SortingState>) => void);
   manualSorting?: boolean;
+  isFetching?: boolean;
 }
 
 export interface DynamicTableRef {
@@ -279,7 +280,7 @@ export interface DynamicTableRef {
 }
 
 export const DynamicTable = forwardRef<DynamicTableRef, DynamicTableProps>(
-  ({ data, globalFilter, pagination, columnsOverride, metadataOverride, columnOrderOverride, pinnedColumnsOverride, onColumnOrderChange, storeHook, sorting: controlledSorting, onSortingChange: controlledOnSortingChange, manualSorting }, ref) => {
+  ({ data, globalFilter, pagination, columnsOverride, metadataOverride, columnOrderOverride, pinnedColumnsOverride, onColumnOrderChange, storeHook, sorting: controlledSorting, onSortingChange: controlledOnSortingChange, manualSorting, isFetching }, ref) => {
     const useStore = storeHook || useColumnStore;
     const store = useStore();
 
@@ -345,6 +346,9 @@ export const DynamicTable = forwardRef<DynamicTableRef, DynamicTableProps>(
                   >
                     {displayName}
                     <SortIcon isSorted={tableCol.getIsSorted()} />
+                    {isFetching && tableCol.getIsSorted() && (
+                      <span className="spinner" style={{ width: 10, height: 10, borderWidth: 2, marginLeft: 2, borderColor: 'var(--text-tertiary)', borderTopColor: 'var(--color-accent)' }} />
+                    )}
                   </button>
                 </div>
               );
