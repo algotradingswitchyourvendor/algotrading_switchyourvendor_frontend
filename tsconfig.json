@@ -35,7 +35,8 @@
     ".next/types/**/*.ts",
     ".next/dev/types/**/*.ts",
     "**/*.mts",
-    "../test files/test_frontend.ts"
+    "../test files/test_frontend.ts",
+    "../testss/autocomplete.test.ts"
   ],
   "exclude": [
     "node_modules"

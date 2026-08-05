@@ -16,12 +16,10 @@ import { useEffect, useRef, useCallback } from "react";
 import { useMarketStore } from "@/stores/market";
 import { useWebSocketStore } from "@/stores/websocket";
 import { WS_RECONNECT } from "@/constants/market";
+import { WS_BASE_URL } from "@/constants/api";
 import type { StockRecord } from "@/types/stock";
 
-const WS_URL =
-  typeof window !== "undefined"
-    ? `wss://${window.location.hostname}:8000/api/v1/ws`
-    : "";
+const WS_URL = WS_BASE_URL;
 
 interface WSMessage {
   type: string;

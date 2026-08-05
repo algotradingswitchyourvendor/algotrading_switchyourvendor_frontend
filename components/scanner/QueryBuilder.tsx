@@ -15,8 +15,11 @@
 import { useState, useRef, useCallback, useMemo, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { RatioGallery } from "./RatioGallery";
+import { AutocompletePopup } from "./AutocompletePopup";
 import { tokenize, parse, validate, validateParentheses, astToConditions } from "@/lib/query-engine";
+import { extractActiveIdentifier } from "@/lib/tokenExtractor";
 import { useColumnStore } from "@/stores/columns";
+import { useAutocomplete } from "@/hooks/useAutocomplete";
 import type { ScannerCondition } from "@/types/scanner";
 import {
   X,
@@ -63,12 +66,12 @@ const OPERATOR_BUTTONS = [
   { label: "(  )", insert: "(" },
 ];
 
-export function QueryBuilder({ 
-  isOpen, 
-  onClose, 
-  onExecute, 
-  hideTargetSelector, 
-  storeHook, 
+export function QueryBuilder({
+  isOpen,
+  onClose,
+  onExecute,
+  hideTargetSelector,
+  storeHook,
   initialQuery,
   showPresetControls,
   onUpdatePreset,
@@ -80,6 +83,9 @@ export function QueryBuilder({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const useStore = storeHook || useColumnStore;
   const { metadata } = useStore();
+  
+  // Phase 1B: Initialize editor state tracking
+  const autocompleteState = useAutocomplete(textareaRef, query, metadata, isOpen);
 
   useEffect(() => {
     if (initialQuery !== undefined) {
@@ -141,28 +147,101 @@ export function QueryBuilder({
     insertAtCursor(insert);
   }, [insertAtCursor]);
 
+  const acceptSuggestion = useCallback((index: number) => {
+
+    if (!autocompleteState.isActive || autocompleteState.suggestions.length === 0) return;
+    
+    const column = autocompleteState.suggestions[index];
+    if (!column) return;
+
+    const ta = textareaRef.current;
+    if (!ta) return;
+
+    const currentQuery = ta.value;
+    const caretPos = ta.selectionStart;
+    
+    const { start: fullTokenStart, end: fullTokenEnd } = extractActiveIdentifier(currentQuery, caretPos);
+
+    const columnName = column.column;
+    const needsQuote = /[^a-zA-Z0-9_]/.test(columnName);
+    const insert = (needsQuote ? `\`${columnName}\`` : columnName) + " ";
+
+    if (typeof ta.setRangeText === "function") {
+      ta.setRangeText(insert, fullTokenStart, fullTokenEnd, "end");
+    } else {
+      // Safe fallback
+      ta.focus();
+      ta.setSelectionRange(fullTokenStart, fullTokenEnd);
+      const newQuery = currentQuery.slice(0, fullTokenStart) + insert + currentQuery.slice(fullTokenEnd);
+      setQuery(newQuery);
+      requestAnimationFrame(() => {
+        const newPos = fullTokenStart + insert.length;
+        ta.setSelectionRange(newPos, newPos);
+      });
+    }
+
+    // Dispatch native input event to synchronize React state
+    ta.dispatchEvent(new Event("input", { bubbles: true }));
+
+    // Close popup and reset state
+    autocompleteState.closePopup();
+  }, [autocompleteState]);
+
   const handleExecute = useCallback(() => {
     if (!analysis.isValid) return;
-    
+
     // Generate the structured conditions array for local live execution
     const conditions = astToConditions(analysis.ast);
-    
+
     // In history mode, ensure we have a date if required by your backend
     onExecute(query, target, target === "history" ? historyDate : undefined, conditions);
     onClose();
   }, [analysis.isValid, analysis.ast, query, target, historyDate, onExecute, onClose]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    // Ignore keydown events during active IME composition
+    if (e.nativeEvent.isComposing) return;
+
+    // IntelliSense Interactive Navigation
+    if (autocompleteState.isActive && autocompleteState.suggestions.length > 0) {
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        e.stopPropagation();
+        autocompleteState.setSelectedIndex((autocompleteState.selectedIndex + 1) % autocompleteState.suggestions.length);
+        return;
+      }
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        e.stopPropagation();
+        autocompleteState.setSelectedIndex((autocompleteState.selectedIndex - 1 + autocompleteState.suggestions.length) % autocompleteState.suggestions.length);
+        return;
+      }
+      if (e.key === "Enter" || e.key === "Tab") {
+        e.preventDefault();
+        e.stopPropagation();
+        acceptSuggestion(autocompleteState.selectedIndex);
+        return;
+      }
+      if (e.key === "Escape") {
+        e.preventDefault();
+        e.stopPropagation();
+        autocompleteState.closePopup();
+        return; // Return early, do not trigger modal close
+      }
+    }
+
     // Ctrl/Cmd + Enter to execute
     if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
       e.preventDefault();
+      e.stopPropagation();
       handleExecute();
     }
     // Escape to close
     if (e.key === "Escape") {
+      e.stopPropagation();
       onClose();
     }
-  }, [handleExecute, onClose]);
+  }, [handleExecute, onClose, autocompleteState, acceptSuggestion]);
 
   if (!isOpen) return null;
 
@@ -219,35 +298,35 @@ export function QueryBuilder({
                 Create Screener
               </h2>
             </div>
-            
+
             <div style={{ display: "flex", alignItems: "center", gap: "var(--sp-4)" }}>
-              
+
               {/* Execution Target Selector */}
               {!hideTargetSelector && (
                 <div style={{ display: "flex", alignItems: "center", gap: "var(--sp-2)" }}>
                   <label style={{ fontSize: 12, display: "flex", alignItems: "center", gap: 4 }}>
-                    <input 
-                      type="radio" 
-                      name="target" 
-                      value="live" 
-                      checked={target === "live"} 
-                      onChange={() => setTarget("live")} 
+                    <input
+                      type="radio"
+                      name="target"
+                      value="live"
+                      checked={target === "live"}
+                      onChange={() => setTarget("live")}
                     /> Live
                   </label>
                   <label style={{ fontSize: 12, display: "flex", alignItems: "center", gap: 4 }}>
-                    <input 
-                      type="radio" 
-                      name="target" 
-                      value="history" 
-                      checked={target === "history"} 
-                      onChange={() => setTarget("history")} 
+                    <input
+                      type="radio"
+                      name="target"
+                      value="history"
+                      checked={target === "history"}
+                      onChange={() => setTarget("history")}
                     /> History
                   </label>
-                  
+
                   {target === "history" && (
-                    <input 
-                      type="date" 
-                      className="input" 
+                    <input
+                      type="date"
+                      className="input"
                       style={{ height: 26, fontSize: 12, padding: "0 8px" }}
                       value={historyDate}
                       onChange={(e) => setHistoryDate(e.target.value)}
@@ -255,7 +334,7 @@ export function QueryBuilder({
                   )}
                 </div>
               )}
-              
+
               {!hideTargetSelector && <div style={{ width: 1, height: 16, backgroundColor: "var(--border-primary)" }} />}
 
               <div style={{ display: "flex", alignItems: "center", gap: "var(--sp-2)" }}>
@@ -340,13 +419,39 @@ export function QueryBuilder({
 
               {/* Editor */}
               <div style={{ flex: 1, padding: "var(--sp-4)", overflow: "hidden", display: "flex", flexDirection: "column" }}>
-                <textarea
+                <div style={{ flex: 1, position: "relative", display: "flex", flexDirection: "column" }}>
+                  {autocompleteState.isActive && autocompleteState.activeToken && autocompleteState.suggestions.length > 0 && autocompleteState.position && (
+                    <div 
+                      style={{ 
+                        position: "absolute", 
+                        top: autocompleteState.position.top, 
+                        left: autocompleteState.position.left,
+                        zIndex: 1000,
+                        pointerEvents: "none" // Allow clicking through the wrapper
+                      }}
+                    >
+                      <div style={{ pointerEvents: "auto" }}>
+                        <AutocompletePopup 
+                          suggestions={autocompleteState.suggestions} 
+                          selectedIndex={autocompleteState.selectedIndex}
+                          onHover={autocompleteState.setSelectedIndex}
+                          onClick={acceptSuggestion}
+                        />
+                      </div>
+                    </div>
+                  )}
+                  <textarea
                   ref={textareaRef}
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
                   placeholder="Write your query here...&#10;&#10;Example: Volume > 500000 AND day_change_pct > 2"
                   spellCheck={false}
                   autoFocus
+                  onKeyDown={handleKeyDown}
+                  aria-expanded={autocompleteState.isActive}
+                  aria-autocomplete="list"
+                  aria-controls="autocomplete-list"
+                  aria-activedescendant={autocompleteState.isActive && autocompleteState.suggestions.length > 0 ? `suggestion-${autocompleteState.selectedIndex}` : undefined}
                   style={{
                     flex: 1,
                     width: "100%",
@@ -373,6 +478,7 @@ export function QueryBuilder({
                     }
                   }}
                 />
+                </div>
 
                 {/* Validation feedback */}
                 <div style={{ marginTop: "var(--sp-2)", minHeight: 48, flexShrink: 0 }}>
