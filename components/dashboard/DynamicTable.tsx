@@ -118,7 +118,7 @@ function renderCell(
   if (column === "Instrument") {
     return (
       <Link
-        href={`/symbol/${encodeURIComponent(String(value))}`}
+        href={`/stock/${encodeURIComponent(String(value))}`}
         style={{
           color: "var(--text-primary)",
           fontWeight: 600,
