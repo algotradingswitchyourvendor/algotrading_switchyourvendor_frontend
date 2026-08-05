@@ -99,14 +99,36 @@ export const useScannerStore = create<ScannerState>((set, get) => ({
       const newSlice = res.data || [];
       const meta = (res as any).meta;
       
-      // Deep compare to prevent unnecessary rerenders
-      const isDifferent = newSlice.length !== results.length || 
-                          newSlice.some((row: StockRecord, i: number) => row.symbol !== results[i]?.symbol);
+      let hasChanges = newSlice.length !== results.length;
+      
+      const mergedSlice = newSlice.map((newRow: StockRecord, i: number) => {
+        const oldRow = results[i];
+        if (!oldRow || oldRow.Instrument !== newRow.Instrument) {
+          hasChanges = true;
+          return newRow;
+        }
+        
+        // If it's the same instrument, check if any values changed
+        let rowChanged = false;
+        for (const key in newRow) {
+          if (newRow[key] !== oldRow[key]) {
+            rowChanged = true;
+            break;
+          }
+        }
+        
+        if (rowChanged) {
+          hasChanges = true;
+          return newRow;
+        }
+        
+        return oldRow; // Keep same reference to prevent re-render
+      });
   
       set((state) => ({
         liveUpdateCount: state.liveUpdateCount + 1,
-        ...(isDifferent && {
-          results: newSlice,
+        ...(hasChanges && {
+          results: mergedSlice,
           meta: meta || state.meta,
           lastUpdated: new Date(),
         })

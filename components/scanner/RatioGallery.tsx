@@ -11,6 +11,7 @@
 import { useState, useMemo } from "react";
 import { useColumnStore } from "@/stores/columns";
 import { Search, ChevronDown, ChevronRight } from "lucide-react";
+import { getDataTypeIcon } from "@/utils/icons";
 
 interface RatioGalleryProps {
   onSelect: (columnName: string) => void;
@@ -210,7 +211,7 @@ export function RatioGallery({ onSelect, storeHook }: RatioGalleryProps) {
                           marginLeft: 4,
                         }}
                       >
-                        {col.type === "number" ? "#" : "Aa"}
+                        {getDataTypeIcon(col.type)}
                       </span>
                     </button>
                   ))}
