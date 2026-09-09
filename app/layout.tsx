@@ -3,6 +3,7 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import { Providers } from "./providers";
 import { Sidebar } from "@/components/layout/Sidebar";
+import { RouteGuard } from "@/components/layout/RouteGuard";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -29,7 +30,7 @@ export default function RootLayout({
           <div className="app-layout">
             <Sidebar />
             <div style={{ flex: 1 }}>
-              {children}
+              <RouteGuard>{children}</RouteGuard>
             </div>
           </div>
         </Providers>
@@ -37,3 +38,4 @@ export default function RootLayout({
     </html>
   );
 }
+
