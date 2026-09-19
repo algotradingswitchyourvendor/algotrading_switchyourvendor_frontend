@@ -29,7 +29,7 @@ export default function Hero() {
   };
 
   return (
-    <section id="top" onMouseMove={onMove} className="relative overflow-hidden pt-32 pb-14 sm:pt-40 lg:pb-20">
+    <section id="top" onMouseMove={onMove} className="relative overflow-hidden pt-10 pb-14 sm:pt-20 lg:pb-20">
       <MarketAtmosphere />
       <div className="relative mx-auto max-w-7xl px-5 sm:px-8">
         <motion.div
