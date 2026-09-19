@@ -26,8 +26,11 @@ function AuthCallbackContent() {
       setStep(1); // Verifying account
       
       await fetchUser();
-      
-      setStep(2); // Session verified
+      if (!useAuthStore.getState().isAuthenticated) {
+        router.replace("/auth/sign-in?error=auth_failed");
+        return;
+      }
+      setStep(2);
     };
     
     completeLogin();
