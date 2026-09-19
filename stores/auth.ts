@@ -11,6 +11,7 @@
 
 import { create } from "zustand";
 import { ENDPOINTS } from "@/constants/api";
+import { useSubscriptionStore } from "./subscription";
 
 export interface AuthUser {
   id: string;
@@ -74,6 +75,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     } catch {
       // If request fails, still clear local state
     }
+    useSubscriptionStore.getState().reset();
     set({ user: null, isAuthenticated: false, isLoading: false });
   },
 

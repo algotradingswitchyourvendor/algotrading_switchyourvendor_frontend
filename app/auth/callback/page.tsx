@@ -21,16 +21,22 @@ function AuthCallbackContent() {
     hasAttempted.current = true;
 
     const completeLogin = async () => {
-      // Small tick to ensure React renders Step 0 before immediately jumping to Step 1
-      await new Promise((resolve) => setTimeout(resolve, 0));
-      setStep(1); // Verifying account
-      
-      await fetchUser();
-      if (!useAuthStore.getState().isAuthenticated) {
+      try {
+        // Small tick to ensure React renders Step 0 before immediately jumping to Step 1
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        setStep(1); // Verifying account
+        
+        await fetchUser();
+        
+        if (!useAuthStore.getState().isAuthenticated) {
+          router.replace("/auth/sign-in?error=auth_failed");
+          return;
+        }
+        
+        setStep(2); // Session verified
+      } catch (err) {
         router.replace("/auth/sign-in?error=auth_failed");
-        return;
       }
-      setStep(2);
     };
     
     completeLogin();

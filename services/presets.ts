@@ -1,5 +1,6 @@
 import { ScannerPreset, ScannerCondition, UnifiedQueryRequest } from "@/types/scanner";
 import { API_BASE_URL } from "@/constants/api";
+import { ApiError } from "./api";
 
 export interface PresetCreatePayload {
   name: string;
@@ -61,12 +62,26 @@ export async function createPreset(payload: PresetCreatePayload): Promise<UserPr
     credentials: "include",
   });
   
-  const data = await res.json();
+  const data = await res.json().catch(() => null);
   if (!res.ok) {
     if (res.status === 409) {
       throw { status: 409, data };
     }
-    throw new Error(data.detail || "Failed to create preset");
+    
+    const detail = data?.detail || data?.error || {};
+    let code = detail?.code || data?.error?.code || "NETWORK_ERROR";
+    let msg = detail?.message || data?.error?.message || `Request failed with status ${res.status}`;
+    
+    if (typeof data?.detail === "string") {
+      if (data.detail === "PRESET_LIMIT_REACHED") code = "PRESET_LIMIT_REACHED";
+      msg = data.detail;
+    }
+
+    throw new ApiError(msg, code, res.status, {
+      feature: detail?.feature,
+      required_plan: detail?.required_plan,
+      current_plan: detail?.current_plan,
+    });
   }
   return data;
 }
@@ -79,10 +94,24 @@ export async function updatePreset(id: string, payload: PresetUpdatePayload): Pr
     credentials: "include",
   });
   
+  const data = await res.json().catch(() => null);
   if (!res.ok) {
-    throw new Error("Failed to update preset");
+    const detail = data?.detail || data?.error || {};
+    let code = detail?.code || data?.error?.code || "NETWORK_ERROR";
+    let msg = detail?.message || data?.error?.message || `Request failed with status ${res.status}`;
+    
+    if (typeof data?.detail === "string") {
+      if (data.detail === "PRESET_LIMIT_REACHED") code = "PRESET_LIMIT_REACHED";
+      msg = data.detail;
+    }
+
+    throw new ApiError(msg, code, res.status, {
+      feature: detail?.feature,
+      required_plan: detail?.required_plan,
+      current_plan: detail?.current_plan,
+    });
   }
-  return res.json();
+  return data;
 }
 
 export async function deletePreset(id: string): Promise<void> {
