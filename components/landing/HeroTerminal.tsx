@@ -99,9 +99,9 @@ export default function HeroTerminal() {
               <ScanSearch size={11} /> Scanner
             </button>
           </div>
-          <span className="rounded border border-primary/25 bg-primary/10 px-1.5 py-0.5 font-mono text-[9px] tracking-widest text-primary">
+          {/* <span className="rounded border border-primary/25 bg-primary/10 px-1.5 py-0.5 font-mono text-[9px] tracking-widest text-primary">
             DEMO
-          </span>
+          </span> */}
         </div>
       </div>
 
