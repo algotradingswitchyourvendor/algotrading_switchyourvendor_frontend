@@ -1,8 +1,7 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
+import Script from "next/script";
 import "./globals.css";
-import { Providers } from "./providers";
-import { Sidebar } from "@/components/layout/Sidebar";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -11,10 +10,17 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "MarketPulse — Live Market Analytics",
+  title: {
+    default: "MarketPulse — Live Market Analytics",
+    template: "%s | MarketPulse",
+  },
   description:
     "Real-time Indian equity market analytics platform with live screening, dynamic columns, and institutional-grade data visualization.",
-  keywords: ["stock market", "NSE", "BSE", "live data", "screener", "analytics"],
+  keywords: ["stock market", "NSE", "BSE", "live data", "screener", "analytics", "MarketPulse"],
+  openGraph: {
+    type: "website",
+    siteName: "MarketPulse",
+  },
 };
 
 export default function RootLayout({
@@ -25,14 +31,8 @@ export default function RootLayout({
   return (
     <html lang="en" className={inter.variable}>
       <body>
-        <Providers>
-          <div className="app-layout">
-            <Sidebar />
-            <div style={{ flex: 1 }}>
-              {children}
-            </div>
-          </div>
-        </Providers>
+        {children}
+        <Script src="https://checkout.razorpay.com/v1/checkout.js" strategy="lazyOnload" />
       </body>
     </html>
   );

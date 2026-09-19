@@ -93,7 +93,7 @@ function renderCell(
     }
     if (column === "volume" || column === "Volume") {
       return (
-        <span className="font-tabular text-muted">
+        <span className="font-tabular">
           {formatVolume(num)}
         </span>
       );
@@ -172,11 +172,7 @@ const MemoizedTableRow = React.memo(
             <td
               key={cell.id}
               style={{
-                textAlign:
-                  metaMap.get(cell.column.id)?.type === "number" &&
-                    cell.column.id !== "Instrument"
-                    ? "right"
-                    : "left",
+                textAlign: cell.column.id === "Instrument" ? "left" : "center",
                 position: isPinned ? "sticky" : "relative",
                 left: isPinned === "left" ? `${cell.column.getStart("left")}px` : undefined,
                 zIndex: isPinned ? 5 : undefined,
@@ -226,10 +222,7 @@ function DraggableHeader({
 
   const style: CSSProperties = {
     minWidth: header.column.getSize(),
-    textAlign:
-      metaMap.get(header.id)?.type === "number" && header.id !== "Instrument"
-        ? "right"
-        : "left",
+    textAlign: header.column.id === "Instrument" ? "left" : "center",
     position: isPinned ? "sticky" : "relative",
     left: isPinned === "left" ? `${header.column.getStart("left")}px` : undefined,
     zIndex: isDragging ? 20 : isPinned ? 15 : undefined,
@@ -407,7 +400,7 @@ export const DynamicTable = forwardRef<DynamicTableRef, DynamicTableProps>(
 
     useImperativeHandle(ref, () => ({
       downloadCSV: (filename: string) => {
-        const rows = table.getRowModel().rows;
+        const rows = pagination ? table.getPaginationRowModel().rows : table.getRowModel().rows;
         const cols = table.getVisibleLeafColumns();
 
         const headers = cols.map((c) => {
@@ -461,15 +454,15 @@ export const DynamicTable = forwardRef<DynamicTableRef, DynamicTableProps>(
     };
 
     return (
-      <div className="table-container">
+      <div className="table-container" style={{ border: "none", borderRadius: "var(--radius-lg)", overflowX: "auto" }}>
         <DndContext
           sensors={sensors}
           collisionDetection={closestCenter}
           onDragEnd={handleDragEnd}
           modifiers={[restrictToHorizontalAxis]}
         >
-          <table className="market-table" style={{ width: table.getTotalSize() }}>
-            <thead>
+          <table className="market-table" style={{ width: table.getTotalSize(), borderCollapse: "collapse" }}>
+            <thead style={{ backgroundColor: "#ffffff" }}>
               {table.getHeaderGroups().map((headerGroup) => (
                 <tr key={headerGroup.id}>
                   <SortableContext

@@ -12,5 +12,4 @@ export const NAV_ITEMS = [
   { label: "Scanner MoM", href: ROUTES.SCANNER, icon: "ScanSearch" },
   { label: "Scanner LTD", href: ROUTES.SCANNER_LTD, icon: "CalendarClock" },
   { label: "History", href: ROUTES.HISTORY, icon: "Clock" },
-  { label: "Settings", href: ROUTES.SETTINGS, icon: "Settings" },
 ] as const;

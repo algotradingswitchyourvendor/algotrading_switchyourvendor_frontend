@@ -82,16 +82,20 @@ class ApiClient {
       const response = await this.fetchWithTimeoutAndRetry(url.toString(), {
         method: "GET",
         headers: DEFAULT_HEADERS,
+        credentials: "include",
         ...options,
       });
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => null);
-        throw new ApiError(
-          errorData?.error?.message || `Request failed with status ${response.status}`,
-          errorData?.error?.code || "NETWORK_ERROR",
-          response.status,
-        );
+        const detail = errorData?.detail || errorData?.error || {};
+        const code = detail?.code || errorData?.error?.code || "NETWORK_ERROR";
+        const msg = detail?.message || errorData?.error?.message || `Request failed with status ${response.status}`;
+        throw new ApiError(msg, code, response.status, {
+          feature: detail?.feature,
+          required_plan: detail?.required_plan,
+          current_plan: detail?.current_plan,
+        });
       }
 
       return response.json();
@@ -106,17 +110,21 @@ class ApiClient {
       const response = await this.fetchWithTimeoutAndRetry(endpoint, {
         method: "POST",
         headers: DEFAULT_HEADERS,
+        credentials: "include",
         body: JSON.stringify(body),
         ...options,
       });
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => null);
-        throw new ApiError(
-          errorData?.error?.message || `Request failed with status ${response.status}`,
-          errorData?.error?.code || "NETWORK_ERROR",
-          response.status,
-        );
+        const detail = errorData?.detail || errorData?.error || {};
+        const code = detail?.code || errorData?.error?.code || "NETWORK_ERROR";
+        const msg = detail?.message || errorData?.error?.message || `Request failed with status ${response.status}`;
+        throw new ApiError(msg, code, response.status, {
+          feature: detail?.feature,
+          required_plan: detail?.required_plan,
+          current_plan: detail?.current_plan,
+        });
       }
 
       return response.json();
@@ -131,11 +139,35 @@ export class ApiError extends Error {
   code: string;
   status: number;
 
-  constructor(message: string, code: string, status: number) {
+  /** True when the backend returns code === "PLAN_REQUIRED" (HTTP 403) */
+  isPlanRequired: boolean;
+  /** Feature key that triggered the plan requirement (e.g., "SCANNER_LTD") */
+  planRequiredFeature?: string;
+  /** Plan name required to access the feature (e.g., "PRO") */
+  planRequiredPlan?: string;
+  /** User's current plan name (e.g., "FREE") */
+  currentPlan?: string;
+
+  constructor(
+    message: string,
+    code: string,
+    status: number,
+    planContext?: {
+      feature?: string;
+      required_plan?: string;
+      current_plan?: string;
+    }
+  ) {
     super(message);
     this.name = "ApiError";
     this.code = code;
     this.status = status;
+    this.isPlanRequired = code === "PLAN_REQUIRED" || code === "PRESET_LIMIT_REACHED";
+    if (planContext) {
+      this.planRequiredFeature = planContext.feature;
+      this.planRequiredPlan = planContext.required_plan;
+      this.currentPlan = planContext.current_plan;
+    }
   }
 }
 

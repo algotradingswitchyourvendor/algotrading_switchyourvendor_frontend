@@ -11,14 +11,14 @@ function GlobalHooks() {
   return null;
 }
 
-export function Providers({ children }: { children: ReactNode }) {
+export function AppProviders({ children }: { children: ReactNode }) {
   const [queryClient] = useState(
     () =>
       new QueryClient({
         defaultOptions: {
           queries: {
             refetchOnWindowFocus: false,
-            retry: 0, // Retries are handled by api.ts with exponential backoff
+            retry: 0,
             staleTime: 30_000,
           },
         },

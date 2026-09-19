@@ -46,7 +46,7 @@ export async function fetchUserPresets(scannerType?: string): Promise<UserPreset
     url.searchParams.append("scanner_type", scannerType);
   }
   
-  const res = await fetch(url.toString());
+  const res = await fetch(url.toString(), { credentials: "include" });
   if (!res.ok) {
     throw new Error("Failed to fetch user presets");
   }
@@ -58,6 +58,7 @@ export async function createPreset(payload: PresetCreatePayload): Promise<UserPr
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
+    credentials: "include",
   });
   
   const data = await res.json();
@@ -75,6 +76,7 @@ export async function updatePreset(id: string, payload: PresetUpdatePayload): Pr
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
+    credentials: "include",
   });
   
   if (!res.ok) {
@@ -86,6 +88,7 @@ export async function updatePreset(id: string, payload: PresetUpdatePayload): Pr
 export async function deletePreset(id: string): Promise<void> {
   const res = await fetch(`${API_BASE_URL}/presets/${id}`, {
     method: "DELETE",
+    credentials: "include",
   });
   if (!res.ok) {
     throw new Error("Failed to delete preset");
@@ -95,6 +98,7 @@ export async function deletePreset(id: string): Promise<void> {
 export async function usePresetApi(id: string): Promise<UserPreset> {
   const res = await fetch(`${API_BASE_URL}/presets/${id}/use`, {
     method: "POST",
+    credentials: "include",
   });
   if (!res.ok) {
     throw new Error("Failed to mark preset as used");
