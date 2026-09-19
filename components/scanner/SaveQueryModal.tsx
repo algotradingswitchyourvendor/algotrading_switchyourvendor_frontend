@@ -116,6 +116,9 @@ export function SaveQueryModal({
           reason: error.data.detail.reason, // 'name_match' or 'payload_match'
         });
         setErrorMsg(error.data.detail.message);
+      } else if (error?.isPlanRequired) {
+        alert("You have reached the maximum number of presets for your plan. Please upgrade to save more presets.");
+        window.location.href = `/settings?tab=plans&feature=max_presets&returnTo=${encodeURIComponent(window.location.pathname)}`;
       } else {
         setErrorMsg(error.message || "Failed to save preset");
       }

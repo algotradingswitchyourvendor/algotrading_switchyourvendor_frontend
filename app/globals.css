@@ -1,4 +1,266 @@
 @import "tailwindcss";
+@import "@fontsource-variable/inter";
+@import "@fontsource-variable/jetbrains-mono";
+
+/* ═══════════════════════════════════════════════════════════════
+   Tailwind v4 Theme — maps utility classes to :root CSS variables.
+   Matches source index.css @theme inline exactly.
+   ═══════════════════════════════════════════════════════════════ */
+
+@theme inline {
+  /* Fonts */
+  --font-heading: var(--font-sans);
+  --font-sans: "Inter Variable", -apple-system, sans-serif;
+  --font-mono: "JetBrains Mono Variable", ui-monospace, monospace;
+
+  /* Brand */
+  --color-brand:      #FF6B00;
+  --color-brand-hover: #E85D00;
+  --color-brand-soft: #FFF3E6;
+  --color-up:         #16A34A;
+  --color-down:       #DC2626;
+  --color-warning:    #F59E0B;
+  --color-signal:     #0EA5E9;
+
+  /* Shadcn semantic tokens — resolved from :root below */
+  --color-background:         var(--background);
+  --color-foreground:         var(--foreground);
+  --color-card:               var(--card);
+  --color-card-foreground:    var(--card-foreground);
+  --color-popover:            var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary:            var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary:          var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted:              var(--muted);
+  --color-muted-foreground:   var(--muted-foreground);
+  --color-accent:             var(--accent);
+  --color-accent-foreground:  var(--accent-foreground);
+  --color-destructive:        var(--destructive);
+  --color-border:             var(--border);
+  --color-input:              var(--input);
+  --color-ring:               var(--ring);
+
+  /* Chart tokens */
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+
+  /* Sidebar tokens */
+  --color-sidebar:                    var(--sidebar);
+  --color-sidebar-foreground:         var(--sidebar-foreground);
+  --color-sidebar-primary:            var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent:             var(--sidebar-accent);
+  --color-sidebar-accent-foreground:  var(--sidebar-accent-foreground);
+  --color-sidebar-border:             var(--sidebar-border);
+  --color-sidebar-ring:               var(--sidebar-ring);
+
+  /* Radius scale — computed from a single :root --radius token */
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   Landing palette — shadcn semantic tokens on :root.
+   Matches source index.css :root block exactly (lines 63-99).
+   Application design-system tokens live further below and do NOT
+   conflict — they use different custom property names.
+   ═══════════════════════════════════════════════════════════════ */
+
+:root {
+  /* Shadcn semantic tokens (used by @theme inline above) */
+  --background:         #FFFFFF;
+  --foreground:         #212529;
+  --card:               #FFFFFF;
+  --card-foreground:    #212529;
+  --popover:            #FFFFFF;
+  --popover-foreground: #212529;
+  --primary:            #FF6B00;
+  --primary-foreground: #FFFFFF;
+  --secondary:          #F8F9FA;
+  --secondary-foreground: #495057;
+  --muted:              #F1F3F5;
+  --muted-foreground:   #868E96;
+  --accent:             #F8F9FA;
+  --accent-foreground:  #212529;
+  --destructive:        #DC2626;
+  --border:             #E9ECEF;
+  --input:              #DEE2E6;
+  --ring:               #FF6B00;
+
+  --chart-1: #FF6B00;
+  --chart-2: #16A34A;
+  --chart-3: #0EA5E9;
+  --chart-4: #868E96;
+  --chart-5: #F59E0B;
+
+  /* Single radius source token — @theme inline scales from this */
+  --radius: 0.375rem;
+
+  --sidebar:                    #F8F9FA;
+  --sidebar-foreground:         #212529;
+  --sidebar-primary:            #FF6B00;
+  --sidebar-primary-foreground: #FFFFFF;
+  --sidebar-accent:             #E9ECEF;
+  --sidebar-accent-foreground:  #212529;
+  --sidebar-border:             #DEE2E6;
+  --sidebar-ring:               #FF6B00;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   @layer base — lowest-specificity element defaults.
+   Matches source index.css @layer base block (lines 101-139).
+   Lives inside a layer so Tailwind utilities always override it.
+   ═══════════════════════════════════════════════════════════════ */
+
+@layer base {
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+  * {
+    margin: 0;
+    padding: 0;
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+  }
+  html {
+    @apply font-sans;
+    scroll-behavior: smooth;
+  }
+  html,
+  body {
+    overflow-x: clip;
+  }
+  section[id] {
+    scroll-margin-top: 5.5rem;
+  }
+  ::selection {
+    background: rgba(255, 107, 0, 0.15);
+    color: #212529;
+  }
+  ::-webkit-scrollbar {
+    width: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: #FAFBFC;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: #DEE2E6;
+    border-radius: 8px;
+    border: 2px solid #FAFBFC;
+  }
+  :focus-visible {
+    outline: 2px solid rgba(255, 107, 0, 0.7);
+    outline-offset: 2px;
+    border-radius: 2px;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   Landing-page utility classes — match source index.css exactly.
+   Un-scoped (no .landing-page prefix) because @layer base already
+   handles html/body defaults. Components use these class names
+   directly as in the source.
+   ═══════════════════════════════════════════════════════════════ */
+
+.bg-market-grid {
+  background-image:
+    linear-gradient(to right, rgba(33, 37, 41, 0.035) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(33, 37, 41, 0.035) 1px, transparent 1px);
+  background-size: 56px 56px;
+}
+
+.bg-market-grid-fine {
+  background-image:
+    linear-gradient(to right, rgba(33, 37, 41, 0.022) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(33, 37, 41, 0.022) 1px, transparent 1px);
+  background-size: 28px 28px;
+}
+
+.text-gradient-fade {
+  background: linear-gradient(180deg, #212529 30%, #868E96 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* Editorial marquee */
+@keyframes marquee-x {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
+}
+.marquee-track {
+  animation: marquee-x 52s linear infinite;
+  will-change: transform;
+}
+.marquee:hover .marquee-track {
+  animation-play-state: paused;
+}
+
+/* Live tick flashes */
+@keyframes tick-up-flash {
+  0%   { background-color: rgba(22, 163, 74, 0.16); }
+  100% { background-color: transparent; }
+}
+@keyframes tick-down-flash {
+  0%   { background-color: rgba(220, 38, 38, 0.16); }
+  100% { background-color: transparent; }
+}
+.tick-up   { animation: tick-up-flash 0.9s ease-out; }
+.tick-down { animation: tick-down-flash 0.9s ease-out; }
+
+/* Pulsing live dot */
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(22, 163, 74, 0.45); }
+  50%       { opacity: 0.75; box-shadow: 0 0 0 5px rgba(22, 163, 74, 0); }
+}
+.pulse-dot {
+  animation: pulse-dot 2.2s ease-in-out infinite;
+}
+
+/* Slow ambient drift for atmosphere nodes */
+@keyframes drift-y {
+  0%, 100% { transform: translateY(0); }
+  50%       { transform: translateY(-14px); }
+}
+.drift-y { animation: drift-y 9s ease-in-out infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .marquee-track,
+  .tick-up,
+  .tick-down,
+  .pulse-dot,
+  .drift-y {
+    animation: none !important;
+  }
+  html {
+    scroll-behavior: auto;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   Application-specific overrides.
+   The app shell (sidebar, topnav, tables, etc.) uses its own
+   design-system tokens (--bg-primary, --text-primary, etc.) that
+   are fully compatible with and do NOT override the shadcn tokens
+   declared above. The app body rule below re-applies the app's
+   own background/color/font-size on top of the @layer base defaults,
+   which is correct cascade behaviour — unlayered rules win over
+   @layer base.
+   ═══════════════════════════════════════════════════════════════ */
 
 /* ═══════════════════════════════════════════════════════════════
    MarketPulse Design System — CSS Custom Properties
@@ -11,53 +273,53 @@
   --font-mono: "JetBrains Mono", "Fira Code", ui-monospace, monospace;
 
   /* ── Backgrounds ────────────────────────────────────────────── */
-  --bg-primary: #ffffff;
+  --bg-primary:   #ffffff;
   --bg-secondary: #f8f9fa;
-  --bg-tertiary: #f1f3f5;
-  --bg-elevated: #ffffff;
-  --bg-hover: #f1f3f5;
-  --bg-active: #e9ecef;
-  --bg-row-alt: #fafbfc;
+  --bg-tertiary:  #f1f3f5;
+  --bg-elevated:  #ffffff;
+  --bg-hover:     #f1f3f5;
+  --bg-active:    #e9ecef;
+  --bg-row-alt:   #fafbfc;
 
   /* ── Surfaces ───────────────────────────────────────────────── */
-  --surface-card: #ffffff;
+  --surface-card:    #ffffff;
   --surface-overlay: rgba(0, 0, 0, 0.15);
 
   /* ── Borders ────────────────────────────────────────────────── */
-  --border-primary: #e9ecef;
+  --border-primary:   #e9ecef;
   --border-secondary: #dee2e6;
-  --border-accent: #ff6b00;
+  --border-accent:    #ff6b00;
 
   /* ── Text ───────────────────────────────────────────────────── */
-  --text-primary: #212529;
+  --text-primary:   #212529;
   --text-secondary: #495057;
-  --text-tertiary: #868e96;
-  --text-muted: #adb5bd;
+  --text-tertiary:  #868e96;
+  --text-muted:     #adb5bd;
 
   /* ── Accent (Orange) ────────────────────────────────────────── */
-  --color-accent: #ff6b00;
+  --color-accent:       #ff6b00;
   --color-accent-hover: #e85d00;
-  --color-accent-bg: rgba(255, 107, 0, 0.06);
+  --color-accent-bg:    rgba(255, 107, 0, 0.06);
   --color-accent-light: #fff3e6;
 
   /* ── Financial Colors ───────────────────────────────────────── */
-  --color-positive: #16a34a;
-  --color-positive-bg: rgba(22, 163, 74, 0.06);
+  --color-positive:      #16a34a;
+  --color-positive-bg:   rgba(22, 163, 74, 0.06);
   --color-positive-muted: #15803d;
-  --color-negative: #dc2626;
-  --color-negative-bg: rgba(220, 38, 38, 0.06);
+  --color-negative:      #dc2626;
+  --color-negative-bg:   rgba(220, 38, 38, 0.06);
   --color-negative-muted: #b91c1c;
-  --color-neutral: #868e96;
+  --color-neutral:       #868e96;
 
   /* ── Status Colors ──────────────────────────────────────────── */
-  --color-live: #16a34a;
-  --color-live-glow: rgba(22, 163, 74, 0.3);
-  --color-closed: #868e96;
-  --color-connecting: #f59e0b;
-  --color-warning: #f59e0b;
-  --color-warning-bg: rgba(245, 158, 11, 0.06);
-  --color-info: #0ea5e9;
-  --color-info-bg: rgba(14, 165, 233, 0.06);
+  --color-live:         #16a34a;
+  --color-live-glow:    rgba(22, 163, 74, 0.3);
+  --color-closed:       #868e96;
+  --color-connecting:   #f59e0b;
+  --color-warning:      #f59e0b;
+  --color-warning-bg:   rgba(245, 158, 11, 0.06);
+  --color-info:         #0ea5e9;
+  --color-info-bg:      rgba(14, 165, 233, 0.06);
 
   /* ── Shadows ────────────────────────────────────────────────── */
   --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.04);
@@ -66,61 +328,70 @@
   --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.12);
 
   /* ── Spacing (8-point grid) ─────────────────────────────────── */
-  --sp-1: 4px;
-  --sp-2: 8px;
-  --sp-3: 12px;
-  --sp-4: 16px;
-  --sp-5: 20px;
-  --sp-6: 24px;
-  --sp-8: 32px;
+  --sp-1:  4px;
+  --sp-2:  8px;
+  --sp-3:  12px;
+  --sp-4:  16px;
+  --sp-5:  20px;
+  --sp-6:  24px;
+  --sp-8:  32px;
   --sp-10: 40px;
   --sp-12: 48px;
-  
+
   /* Border Radius */
-  --radius-sm: 4px;
-  --radius-md: 6px;
-  --radius-lg: 8px;
+  --radius-sm:   4px;
+  --radius-md:   6px;
+  --radius-lg:   8px;
   --radius-full: 9999px;
+
   /* ── Transitions ────────────────────────────────────────────── */
   --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
   --transition-base: 200ms cubic-bezier(0.4, 0, 0.2, 1);
   --transition-slow: 300ms cubic-bezier(0.4, 0, 0.2, 1);
 
   /* ── Layout ─────────────────────────────────────────────────── */
-  --sidebar-width: 64px;
-  --topnav-height: 48px;
+  --sidebar-width:  64px;
+  --topnav-height:  48px;
 
   color-scheme: light;
 }
 
 /* ═══════════════════════════════════════════════════════════════
-   Global Resets
+   Global Resets — app shell defaults.
+   box-sizing is set in @layer base above. These unlayered rules
+   override @layer base for the application shell body/html only.
+   NOTE: margin/padding reset is intentionally in @layer base so
+   that Tailwind spacing utilities (pt-*, pb-*, etc.) are not
+   overridden — unlayered * { padding:0 } beats @layer utilities.
    ═══════════════════════════════════════════════════════════════ */
-
-* {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
-}
 
 html {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* App-shell body defaults — override @layer base for the dashboard.
+   Landing page lives inside .landing-page which inherits font-sans
+   from @layer base and overrides font-size via its own utilities. */
 body {
   font-family: var(--font-sans);
   background-color: var(--bg-primary);
   color: var(--text-primary);
   min-height: 100vh;
   line-height: 1.5;
-  font-size: 13px;
+}
+
+/* Landing page: restore browser-default font-size so Tailwind
+   size utilities (text-sm, text-lg, etc.) behave as authored. */
+.landing-page {
+  font-size: 1rem;
 }
 
 /* ═══════════════════════════════════════════════════════════════
    Scrollbar
    ═══════════════════════════════════════════════════════════════ */
 
+/* App shell: thin scrollbar */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
@@ -137,6 +408,25 @@ body {
 
 ::-webkit-scrollbar-thumb:hover {
   background: var(--text-muted);
+}
+
+/* Landing page: branded scrollbar matching source index.css */
+.landing-page::-webkit-scrollbar,
+.landing-page *::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.landing-page::-webkit-scrollbar-track,
+.landing-page *::-webkit-scrollbar-track {
+  background: #FAFBFC;
+}
+
+.landing-page::-webkit-scrollbar-thumb,
+.landing-page *::-webkit-scrollbar-thumb {
+  background: #DEE2E6;
+  border-radius: 8px;
+  border: 2px solid #FAFBFC;
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -276,12 +566,12 @@ body {
    ═══════════════════════════════════════════════════════════════ */
 
 @keyframes flash-positive {
-  0% { background-color: rgba(22, 163, 74, 0.12); }
+  0%   { background-color: rgba(22, 163, 74, 0.12); }
   100% { background-color: transparent; }
 }
 
 @keyframes flash-negative {
-  0% { background-color: rgba(220, 38, 38, 0.12); }
+  0%   { background-color: rgba(220, 38, 38, 0.12); }
   100% { background-color: transparent; }
 }
 
@@ -299,7 +589,7 @@ body {
 
 @keyframes pulse-live {
   0%, 100% { opacity: 1; }
-  50% { opacity: 0.4; }
+  50%       { opacity: 0.4; }
 }
 
 .live-dot {
@@ -316,7 +606,7 @@ body {
    ═══════════════════════════════════════════════════════════════ */
 
 @keyframes shimmer {
-  0% { background-position: -200% 0; }
+  0%   { background-position: -200% 0; }
   100% { background-position: 200% 0; }
 }
 
@@ -359,15 +649,6 @@ body {
 
 .animate-spin {
   animation: spin 1s linear infinite;
-}
-
-/* ═══════════════════════════════════════════════════════════════
-   Focus / Accessibility
-   ═══════════════════════════════════════════════════════════════ */
-
-:focus-visible {
-  outline: 2px solid var(--color-accent);
-  outline-offset: 2px;
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -678,3 +959,5 @@ body {
     left: 0;
   }
 }
+
+/* recompile trigger */

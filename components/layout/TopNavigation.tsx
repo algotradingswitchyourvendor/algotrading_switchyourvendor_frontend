@@ -18,7 +18,17 @@ export function TopNavigation({ title }: TopNavigationProps) {
   const isLive = (marketStatusObj?.is_open ?? false) && isConnected;
 
   return (
-    <header className="app-topnav">
+    <header
+      style={{
+        height: "var(--topnav-height)",
+        backgroundColor: "var(--bg-primary)",
+        borderBottom: "1px solid var(--border-primary)",
+        display: "flex",
+        alignItems: "center",
+        padding: "0 var(--sp-6)",
+        overflow: "hidden",
+      }}
+    >
       {/* Left — Page Title */}
       <div style={{ minWidth: 180, flexShrink: 0 }}>
         <h1

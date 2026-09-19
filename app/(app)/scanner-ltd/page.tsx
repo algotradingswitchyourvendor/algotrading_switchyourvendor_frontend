@@ -1,6 +1,9 @@
 "use client";
 
 import { useState, useCallback, useRef, useEffect } from "react";
+import { FeatureGate } from "@/components/common/FeatureGate";
+import { useEntitlements } from "@/hooks/use-entitlements";
+
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
 import { TopNavigation } from "@/components/layout/TopNavigation";
@@ -8,8 +11,8 @@ import { DynamicTable, type DynamicTableRef } from "@/components/dashboard/Dynam
 import { Pagination } from "@/components/common/Pagination";
 import { PageSizeSelector } from "@/components/dashboard/PageSizeSelector";
 import { ColumnSelector } from "@/components/dashboard/ColumnSelector";
-import { QueryBuilder } from "@/components/scanner/QueryBuilder";
 import { PresetCard } from "@/components/scanner/PresetCard";
+import { QueryBuilder } from "@/components/scanner/QueryBuilder";
 import { SaveQueryModal } from "@/components/scanner/SaveQueryModal";
 import { MyPresetsList } from "@/components/scanner/MyPresetsList";
 import {
@@ -17,11 +20,11 @@ import {
   SkeletonTable,
   ErrorState,
 } from "@/components/common/States";
-import { useColumnStore } from "@/stores/columns";
-import { useScannerStore } from "@/stores/scanner";
+import { useColumnLTDStore } from "@/stores/columnsLTD";
+import { useScannerLTDStore } from "@/stores/scannerLTD";
 import { useWebSocketStore } from "@/stores/websocket";
 import { useMarketStore } from "@/stores/market";
-import { fetchScannerPresets, runScanner } from "@/services/data";
+import { fetchScannerPresets, runScanner, fetchAvailableDates, fetchMetadata } from "@/services/data";
 import type {
   ScannerCondition,
   ScannerPreset,
@@ -45,6 +48,7 @@ import {
   Radio,
   Square,
   Sparkles,
+  AlertTriangle,
   Save,
 } from "lucide-react";
 
@@ -226,25 +230,35 @@ function FilterChips({
 
 /* ── Summary Cards ───────────────────────────────────────────── */
 
+function formatNumberCompact(num: number): string {
+  if (num < 1000) return num.toString();
+  if (num >= 1000000) {
+    return (num / 1000000).toLocaleString("en-IN", { maximumFractionDigits: 2 }) + "M";
+  }
+  return (num / 1000).toLocaleString("en-IN", { maximumFractionDigits: 2 }) + "K";
+}
+
 function ScanSummary({
   results,
   totalScanned,
+  totalMatched,
   isLive,
   liveUpdateCount,
   lastUpdated,
-  matchedCount,
+  meta,
 }: {
   results: StockRecord[];
   totalScanned: number;
+  totalMatched: number;
   isLive: boolean;
   liveUpdateCount: number;
   lastUpdated: Date | null;
-  matchedCount: number;
+  meta: any;
 }) {
-  const bullish = results.filter(
+  const bullish = meta?.bullish_count ?? results.filter(
     (s) => typeof s.day_change_pct === "number" && (s.day_change_pct as number) > 0
   ).length;
-  const bearish = results.filter(
+  const bearish = meta?.bearish_count ?? results.filter(
     (s) => typeof s.day_change_pct === "number" && (s.day_change_pct as number) < 0
   ).length;
 
@@ -254,16 +268,16 @@ function ScanSummary({
         <span style={{ fontSize: 10, fontWeight: 500, color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: "0.04em", display: "block", marginBottom: 4 }}>
           Scanned
         </span>
-        <span className="font-tabular" style={{ fontSize: 18, fontWeight: 700, color: "var(--text-primary)" }}>
-          {totalScanned.toLocaleString("en-IN")}
+        <span className="font-tabular" style={{ fontSize: 18, fontWeight: 700, color: "var(--text-primary)" }} title={totalScanned.toLocaleString("en-IN")}>
+          {formatNumberCompact(totalScanned)}
         </span>
       </div>
       <div className="card-compact" style={{ minWidth: 120 }}>
         <span style={{ fontSize: 10, fontWeight: 500, color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: "0.04em", display: "block", marginBottom: 4 }}>
           Matched
         </span>
-        <span className="font-tabular" style={{ fontSize: 18, fontWeight: 700, color: "var(--color-accent)" }}>
-          {matchedCount.toLocaleString("en-IN")}
+        <span className="font-tabular" style={{ fontSize: 18, fontWeight: 700, color: "var(--color-accent)" }} title={totalMatched.toLocaleString("en-IN")}>
+          {formatNumberCompact(totalMatched)}
         </span>
       </div>
       <div className="card-compact" style={{ minWidth: 120 }}>
@@ -321,8 +335,23 @@ const DEFAULT_CONDITION: ScannerCondition = {
   logical: "AND",
 };
 
-export default function ScannerPage() {
-  const { metadata, pageSize } = useColumnStore();
+export default function ScannerLTDPage() {
+  return (
+    <FeatureGate
+      feature="scanner_ltd"
+      featureLabel="Scanner LTD"
+      requiredPlan="PRO"
+      returnTo="/scanner-ltd"
+      redirect={true}
+    >
+      <ScannerLTDPageContent />
+    </FeatureGate>
+  );
+}
+
+function ScannerLTDPageContent() {
+  const { canAccess } = useEntitlements();
+  const { metadata, pageSize, setMetadata } = useColumnLTDStore();
   const [conditions, setConditions] = useState<ScannerCondition[]>([
     { ...DEFAULT_CONDITION },
   ]);
@@ -330,8 +359,42 @@ export default function ScannerPage() {
   const [queryBuilderOpen, setQueryBuilderOpen] = useState(false);
   const [initialBuilderQuery, setInitialBuilderQuery] = useState("");
   const [saveModalOpen, setSaveModalOpen] = useState(false);
+  const [activeRequest, setActiveRequest] = useState<import("@/types/scanner").UnifiedQueryRequest | null>(null);
   const [sorting, setSorting] = useState<import("@tanstack/react-table").SortingState>([]);
   const tableRef = useRef<DynamicTableRef>(null);
+
+  const [selectedDate, setSelectedDate] = useState<string>("");
+
+  const datesQuery = useQuery({
+    queryKey: ["history-dates"],
+    queryFn: async () => {
+      const res = await fetchAvailableDates();
+      return res.data || [];
+    },
+  });
+
+  useEffect(() => {
+    if (datesQuery.data && datesQuery.data.length > 0 && !selectedDate) {
+      setSelectedDate(datesQuery.data[0]);
+    }
+  }, [datesQuery.data, selectedDate]);
+
+  const metadataQuery = useQuery({
+    queryKey: ["metadata", "history", selectedDate],
+    queryFn: async () => {
+      if (!selectedDate) return null;
+      const res = await fetchMetadata("history", selectedDate);
+      if (!res.success) throw new Error(res.error?.message);
+      return res.data;
+    },
+    enabled: !!selectedDate,
+  });
+
+  useEffect(() => {
+    if (metadataQuery.data) {
+      setMetadata(metadataQuery.data.columns, metadataQuery.data.groups);
+    }
+  }, [metadataQuery.data, setMetadata]);
 
   // Scanner store for results and live state
   const {
@@ -342,12 +405,8 @@ export default function ScannerPage() {
     isLoading: scannerLoading,
     liveUpdateCount,
     lastUpdated,
-    activeConditions,
-    activeRequest,
     setResults,
     setActiveConditions,
-    setActiveRequest,
-    executeLive,
     setLive,
     setLoading,
     setError,
@@ -357,24 +416,23 @@ export default function ScannerPage() {
     isModified,
     setLoadedPreset,
     checkModified,
-  } = useScannerStore();
+  } = useScannerLTDStore();
 
-  const { stocks, version } = useMarketStore();
-
-  // Re-run executeLive on every new snapshot
-  useEffect(() => {
-    if (isLive && activeRequest) {
-      executeLive(stocks, activeRequest);
-    }
-  }, [version, isLive, activeRequest, stocks, executeLive]);
+  const { stocks } = useMarketStore();
 
   // Use the store's sendMessage to send WS subscription messages
   // without creating a second WebSocket connection
-  const { sendMessage } = useWebSocketStore();
+  const sendMessage = (msg: any) => { };
 
   const handleDownloadCSV = () => {
+    if (!canAccess("csv_export")) {
+      alert("CSV Export requires the PRO plan. Please upgrade to use this feature.");
+      window.location.href = "/settings?tab=plans&feature=csv_export&returnTo=/scanner-ltd";
+      return;
+    }
+
     tableRef.current?.downloadCSV(
-      `marketpulse_scan_${new Date().toISOString().split("T")[0]}.csv`
+      `marketpulse_scan_${selectedDate || new Date().toISOString().split("T")[0]}.csv`
     );
   };
 
@@ -390,71 +448,8 @@ export default function ScannerPage() {
     },
   });
 
-  const scanMutation = useMutation({
-    mutationFn: async (request: import("@/types/scanner").UnifiedQueryRequest) => {
-      const res = await runScanner(request as any);
-      return { data: res.data || [], meta: (res as any).meta, request };
-    },
-    onSuccess: (result) => {
-      const totalScanned = result.meta?.total || result.data.length;
-      setResults(result.data, result.meta || {
-        total: result.data.length,
-        page: 1,
-        page_size: result.data.length,
-        total_pages: 1,
-        conditions_applied: 0,
-      });
-      setCurrentPage(1);
-
-      // Enable live mode and store the request for the WebSocket effect
-      const validConditions = conditions.filter((c) => c.column && c.value !== "");
-      if (validConditions.length > 0 || result.request.query_text) {
-        if (validConditions.length > 0) {
-          setActiveConditions(validConditions);
-        }
-        
-        if (result.request.execution_target === "live") {
-          setLive(true);
-        }
-        
-        setActiveRequest({
-          ...result.request,
-          sort_by: result.request.sort_by || sorting[0]?.id || undefined,
-          sort_order: result.request.sort_order || (sorting[0] ? (sorting[0].desc ? "desc" : "asc") : undefined),
-        });
-      }
-    },
-  });
-
-  const wsStatus = useWebSocketStore((s) => s.status);
-
-  useEffect(() => {
-    console.log("[LIFECYCLE] ScannerPage mounted");
-    return () => {
-      console.log("[LIFECYCLE] ScannerPage unmounted");
-    }
-  }, []);
-
-  // Subscribe if live mode is active when component mounts or reconnects
-  useEffect(() => {
-    if (isLive && activeRequest && wsStatus === "connected") {
-      sendMessage({
-        type: "subscribe_scanner",
-        request: activeRequest,
-      });
-    }
-  }, [isLive, activeRequest, wsStatus, sendMessage]);
-
-  const evaluateModification = (nextConditions: ScannerCondition[]) => {
-    checkModified({
-      execution_target: "live",
-      conditions: nextConditions,
-      sort_by: sorting[0]?.id || undefined,
-      sort_order: sorting[0] ? (sorting[0].desc ? "desc" : "asc") : undefined,
-      page: 1,
-      page_size: pageSize || 5000,
-    });
-  };
+  // Request ID ref for preventing race conditions
+  const requestIdRef = useRef(0);
 
   const handleConditionChange = useCallback(
     (index: number, field: keyof ScannerCondition, value: string | number) => {
@@ -466,38 +461,26 @@ export default function ScannerPage() {
         } else {
           next[index] = { ...next[index], [field]: value };
         }
-        setTimeout(() => evaluateModification(next), 0);
         return next;
       });
     },
-    [checkModified, sorting, pageSize]
+    []
   );
 
   const addCondition = () =>
-    setConditions((prev) => {
-      const next = [...prev, { ...DEFAULT_CONDITION }];
-      setTimeout(() => evaluateModification(next), 0);
-      return next;
-    });
+    setConditions((prev) => [...prev, { ...DEFAULT_CONDITION }]);
 
   const removeCondition = (index: number) =>
-    setConditions((prev) => {
-      const next = prev.filter((_, i) => i !== index);
-      setTimeout(() => evaluateModification(next), 0);
-      return next;
-    });
+    setConditions((prev) => prev.filter((_, i) => i !== index));
 
   const resetConditions = () => {
     setConditions([{ ...DEFAULT_CONDITION }]);
     setSorting([]);
     resetScanner();
-    // Unsubscribe from live scanner updates
-    sendMessage({ type: "unsubscribe_scanner" });
   };
 
   const stopLive = () => {
     setLive(false);
-    sendMessage({ type: "unsubscribe_scanner" });
   };
 
   const runScan = () => {
@@ -506,7 +489,8 @@ export default function ScannerPage() {
     setLoading(true);
     
     const request: import("@/types/scanner").UnifiedQueryRequest = {
-      execution_target: "live",
+      execution_target: "history", 
+      date: selectedDate,
       conditions: valid.length > 0 ? valid : undefined,
       query_text: !valid.length && initialBuilderQuery ? initialBuilderQuery : undefined,
       sort_by: sorting[0]?.id || undefined,
@@ -521,36 +505,40 @@ export default function ScannerPage() {
   const applyPreset = (preset: ScannerPreset) => {
     setLoadedPreset(preset);
 
-    const presetConditions = preset.request?.conditions || (preset as any).conditions || [];
-    
-    if (presetConditions && presetConditions.length > 0) {
-      setConditions(presetConditions);
+    // Populate Builder UI if structured conditions exist
+    if (preset.request?.conditions && preset.request.conditions.length > 0) {
+      setConditions(preset.request.conditions);
     } else {
       setConditions([{ ...DEFAULT_CONDITION }]);
     }
-
+    
+    // Set the active query but don't run it yet
     if (preset.request) {
       setActiveRequest(preset.request);
       
+      // If it's a raw query, open the builder so they can see/edit it
       if (preset.request.query_text) {
-        setInitialBuilderQuery(preset.request.query_text);
         setQueryBuilderOpen(true);
       }
     }
 
+    // Restore UI state if it exists
     if (preset.sorting) {
       setSorting(preset.sorting);
     }
     if (preset.page_size) {
-      useColumnStore.getState().setPageSize(preset.page_size);
+      useColumnLTDStore.getState().setPageSize(preset.page_size);
     }
     if (preset.selected_columns) {
-      useColumnStore.getState().setVisibleColumns(preset.selected_columns);
+      useColumnLTDStore.getState().setVisibleColumns(preset.selected_columns);
     }
 
+    const presetConditions = preset.request?.conditions || (preset as any).conditions || [];
+    
     setLoading(true);
     queryMutation.mutate({
-      execution_target: "live",
+      execution_target: "history",
+      date: selectedDate,
       conditions: presetConditions.length > 0 ? presetConditions : undefined,
       query_text: preset.request?.query_text || undefined,
       sort_by: preset.sorting?.[0]?.id || sorting[0]?.id || undefined,
@@ -560,43 +548,15 @@ export default function ScannerPage() {
     });
   };
 
-  const handleEditConditions = (preset: ScannerPreset) => {
-    setLoadedPreset(preset);
-    const conditions = preset.request?.conditions || (preset as any).conditions || [];
-    if (conditions.length > 0) {
-      setConditions(conditions);
-    } else {
-      setConditions([{ ...DEFAULT_CONDITION }]);
-    }
-    
-    let qText = preset.request?.query_text;
-    if (!qText && conditions.length > 0) {
-      qText = conditions.map((c: ScannerCondition) => `${c.column} ${c.operator} ${c.value}`).join(" AND ");
-    }
-    setInitialBuilderQuery(qText || "");
-    setQueryBuilderOpen(true);
-  };
-
-  // Unsubscribe on unmount
+  // Unsubscribe on unmount - not needed for historical page
   useEffect(() => {
-    return () => {
-      sendMessage({ type: "unsubscribe_scanner" });
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    return () => {};
   }, []);
 
   // Trigger scan when sorting changes if it has run before
   useEffect(() => {
     if (hasRun) {
-      if (isLive && activeRequest) {
-        // If live, updating activeRequest triggers a new websocket subscription
-        setActiveRequest({
-          ...activeRequest,
-          sort_by: sorting[0]?.id || undefined,
-          sort_order: sorting[0] ? (sorting[0].desc ? "desc" : "asc") : undefined,
-        });
-      } else if (activeRequest) {
-        // If not live, manually fire the query
+      if (activeRequest) {
         setLoading(true);
         queryMutation.mutate({
           ...activeRequest,
@@ -617,14 +577,21 @@ export default function ScannerPage() {
   );
 
   const totalScanned = meta?.total_scanned || meta?.total || results.length;
+  const totalMatched = meta?.total || results.length;
 
   const queryMutation = useMutation({
     mutationFn: async (request: import("@/types/scanner").UnifiedQueryRequest) => {
+      const reqId = ++requestIdRef.current;
       const { runQuery } = await import("@/services/data");
       const res = await runQuery(request);
-      return { data: res.data || [], meta: (res as any).meta, request };
+      if (!res.success) {
+        throw new Error(res.error?.message || "Scanner query failed");
+      }
+      return { data: res.data || [], meta: (res as any).meta, reqId, request };
     },
     onSuccess: (result) => {
+      if (result.reqId !== requestIdRef.current) return;
+
       setResults(result.data, result.meta || {
         total: result.data.length,
         total_scanned: result.data.length,
@@ -634,79 +601,92 @@ export default function ScannerPage() {
         conditions_applied: 0,
       });
       setCurrentPage(1);
-      
-      if (result.request.execution_target === "live") {
-        setLive(true);
+
+      if (result.request.execution_target === "history") {
         setActiveRequest(result.request);
+        if (result.request.conditions && result.request.conditions.length > 0) {
+          setActiveConditions(result.request.conditions);
+        }
       }
+    },
+    onError: (error: Error) => {
+      setLoading(false);
+      setError(error.message);
+      setResults([], {
+        total: 0,
+        total_scanned: 0,
+        page: 1,
+        page_size: 50,
+        total_pages: 0,
+        conditions_applied: 0,
+      });
     },
   });
 
   const handleQueryBuilderExecute = useCallback(
-    (queryText: string, target: "live" | "history", date?: string, conditions?: import("@/types/scanner").ScannerCondition[]) => {
+    (queryText: string, target: "live" | "history", date?: string) => {
       queryMutation.mutate({
         query_text: queryText,
-        conditions: conditions,
         execution_target: target,
-        date: date,
+        date: date || selectedDate,
         sort_by: sorting[0]?.id || undefined,
         sort_order: sorting[0] ? (sorting[0].desc ? "desc" : "asc") : undefined,
         page: 1,
-        page_size: 5000, // Fetch up to the backend limit for local pagination
+        page_size: 5000,
       });
     },
-    [queryMutation]
+    [queryMutation, selectedDate]
   );
-
-  const handleUpdatePresetFromBuilder = useCallback((queryText: string, conditions: ScannerCondition[]) => {
-    const request: import("@/types/scanner").UnifiedQueryRequest = {
-      query_text: queryText,
-      conditions: conditions,
-      execution_target: "live",
-      page: 1,
-      page_size: pageSize || 5000,
-    };
-    setActiveRequest(request);
-    checkModified(request);
-    setSaveModalOpen(true);
-  }, [pageSize, checkModified]);
-
-  const handleSaveAsNewFromBuilder = useCallback((queryText: string, conditions: ScannerCondition[]) => {
-    const request: import("@/types/scanner").UnifiedQueryRequest = {
-      query_text: queryText,
-      conditions: conditions,
-      execution_target: "live",
-      page: 1,
-      page_size: pageSize || 5000,
-    };
-    setActiveRequest(request);
-    resetScanner(); // Resets loaded preset so modal opens in 'new' mode
-    setSaveModalOpen(true);
-  }, [pageSize, resetScanner]);
 
   return (
     <div style={{ display: "flex", flexDirection: "column" }}>
-      <TopNavigation title="Market Scanner MoM" />
+      <TopNavigation title="Market Scanner LTD" />
+      
+      {loadedPresetName && (
+        <div style={{ 
+          padding: "var(--sp-2) var(--sp-6)", 
+          backgroundColor: "var(--bg-secondary)", 
+          borderBottom: "1px solid var(--border-light)",
+          display: "flex",
+          alignItems: "center",
+          gap: "var(--sp-2)",
+          fontSize: 12
+        }}>
+          <span style={{ color: "var(--text-secondary)" }}>Current Preset:</span>
+          <span style={{ fontWeight: 600, color: "var(--text-primary)" }}>{loadedPresetName}</span>
+          {isModified && (
+            <span style={{ 
+              color: "var(--color-warning)", 
+              display: "flex", 
+              alignItems: "center", 
+              gap: 4,
+              marginLeft: "var(--sp-2)",
+              fontSize: 11,
+              fontWeight: 500
+            }}>
+              ● Modified
+            </span>
+          )}
+        </div>
+      )}
 
       {/* Query Builder Modal */}
       <QueryBuilder
         isOpen={queryBuilderOpen}
         onClose={() => setQueryBuilderOpen(false)}
         onExecute={handleQueryBuilderExecute}
-        initialQuery={initialBuilderQuery}
-        showPresetControls={!!loadedPresetId}
-        onUpdatePreset={handleUpdatePresetFromBuilder}
-        onSaveAsNew={handleSaveAsNewFromBuilder}
+        hideTargetSelector={true}
+        initialQuery={activeRequest?.query_text}
+        storeHook={useColumnLTDStore}
       />
-
       <SaveQueryModal 
         isOpen={saveModalOpen} 
         onClose={() => setSaveModalOpen(false)} 
         request={activeRequest}
-        scannerType="live"
+        scannerType="historical"
         sorting={sorting}
         pageSize={pageSize}
-        selectedColumns={useColumnStore.getState().visibleColumns}
+        selectedColumns={useColumnLTDStore.getState().visibleColumns}
         loadedPresetId={loadedPresetId}
         loadedPresetName={loadedPresetName}
         isModified={isModified}
@@ -721,43 +701,12 @@ export default function ScannerPage() {
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.2 }}
-        className="app-content"
         style={{ padding: "var(--sp-6)" }}
       >
-        {loadedPresetName && (
-          <div style={{ 
-            padding: "var(--sp-3) var(--sp-4)", 
-            backgroundColor: "var(--bg-secondary)", 
-            border: "1px solid var(--border-light)",
-            borderRadius: "var(--radius-md)",
-            marginBottom: "var(--sp-5)",
-            display: "flex",
-            alignItems: "center",
-            gap: "var(--sp-2)",
-            fontSize: 13
-          }}>
-            <span style={{ color: "var(--text-secondary)" }}>Current Preset:</span>
-            <span style={{ fontWeight: 600, color: "var(--text-primary)" }}>{loadedPresetName}</span>
-            {isModified && (
-              <span style={{ 
-                color: "var(--color-warning)", 
-                display: "flex", 
-                alignItems: "center", 
-                gap: 4,
-                marginLeft: "var(--sp-2)",
-                fontSize: 12,
-                fontWeight: 500
-              }}>
-                ● Modified
-              </span>
-            )}
-          </div>
-        )}
-
         <div style={{ display: "flex", flexDirection: "column", gap: "var(--sp-5)" }}>
           {/* Presets */}
           {presetsQuery.data && presetsQuery.data.length > 0 && (
-            <div style={{ marginBottom: "var(--sp-2)" }}>
+            <div>
               <h3
                 style={{
                   fontSize: 11,
@@ -783,14 +732,13 @@ export default function ScannerPage() {
                     key={preset.id}
                     preset={preset}
                     onSelect={applyPreset}
-                    onEditConditions={handleEditConditions}
                   />
                 ))}
               </div>
             </div>
           )}
 
-          <MyPresetsList scannerType="live" onSelect={applyPreset} onEditConditions={handleEditConditions} />
+          <MyPresetsList scannerType="historical" onSelect={applyPreset} />
 
           {/* Condition Builder */}
           <div className="card" style={{ padding: "var(--sp-5)" }}>
@@ -811,7 +759,7 @@ export default function ScannerPage() {
                     color: "var(--text-primary)",
                   }}
                 >
-                  Build Conditions
+                  Scanner Query
                 </h3>
                 {isLive && (
                   <span
@@ -837,6 +785,19 @@ export default function ScannerPage() {
                 )}
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: "var(--sp-2)", flexShrink: 0 }}>
+                {datesQuery.data && (
+                  <select
+                    className="select"
+                    value={selectedDate}
+                    onChange={(e) => setSelectedDate(e.target.value)}
+                    style={{ height: 26, fontSize: 12, padding: "0 8px" }}
+                  >
+                    <option value="" disabled>Select Date</option>
+                    {datesQuery.data.map((date) => (
+                      <option key={date} value={date}>{date}</option>
+                    ))}
+                  </select>
+                )}
                 {isLive && (
                   <button
                     className="btn btn-ghost"
@@ -848,21 +809,7 @@ export default function ScannerPage() {
                     Stop Live
                   </button>
                 )}
-                <button
-                  className="btn btn-ghost"
-                  onClick={resetConditions}
-                  title="Reset all"
-                >
-                  <RotateCcw size={13} />
-                  Reset
-                </button>
-                <button
-                  className="btn btn-ghost"
-                  onClick={addCondition}
-                >
-                  <Plus size={14} />
-                  Add Condition
-                </button>
+
                 <button
                   className="btn btn-secondary"
                   onClick={() => setQueryBuilderOpen(true)}
@@ -880,49 +827,50 @@ export default function ScannerPage() {
                   <Save size={13} />
                   Save Query
                 </button>
-                <button
-                  className="btn btn-primary"
-                  onClick={runScan}
-                  disabled={scanMutation.isPending || !hasValidConditions}
-                >
-                  <Play size={13} />
-                  {scanMutation.isPending ? "Scanning..." : "Run Scan"}
-                </button>
+
               </div>
             </div>
 
-            <div style={{ display: "flex", flexDirection: "column", gap: "var(--sp-2)" }}>
-              {conditions.map((condition, idx) => (
-                <ConditionRow
-                  key={idx}
-                  condition={condition}
-                  index={idx}
-                  columns={filterableColumns}
-                  onChange={handleConditionChange}
-                  onRemove={removeCondition}
-                  isOnly={conditions.length === 1}
-                />
-              ))}
-            </div>
           </div>
 
           {/* Active filter chips */}
           <FilterChips conditions={conditions} onRemove={removeCondition} />
 
           {/* Results */}
+          {hasRun && meta?.truncated && (
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "var(--sp-2)",
+                padding: "var(--sp-3)",
+                backgroundColor: "rgba(255,165,0,0.1)",
+                border: "1px solid rgba(255,165,0,0.3)",
+                borderRadius: "var(--radius-sm)",
+                color: "#d97706",
+                fontSize: 12,
+                fontWeight: 500,
+              }}
+            >
+              <AlertTriangle size={14} />
+              Showing first 5,000 matching records. Please refine your query for more specific results.
+            </div>
+          )}
+
           {hasRun && results.length > 0 && (
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <ScanSummary
                 results={results}
                 totalScanned={totalScanned}
+                totalMatched={totalMatched}
                 isLive={isLive}
                 liveUpdateCount={liveUpdateCount}
                 lastUpdated={lastUpdated}
-                matchedCount={meta?.matched_count ?? meta?.total ?? results.length}
+                meta={meta}
               />
-              
+
               <div style={{ display: "flex", alignItems: "center", gap: "var(--sp-3)", flexShrink: 0 }}>
-                <ColumnSelector />
+                <ColumnSelector storeHook={useColumnLTDStore} />
                 <button
                   className="btn btn-secondary"
                   style={{ height: 32 }}
@@ -932,15 +880,16 @@ export default function ScannerPage() {
                   <Download size={14} />
                   <span>CSV</span>
                 </button>
-                <PageSizeSelector />
+                <PageSizeSelector options={[25, 50, 100, 250, 1000]} storeHook={useColumnLTDStore} />
               </div>
             </div>
           )}
 
-          {scanMutation.isError || queryMutation.isError ? (
+          {/* State rendering */}
+          {queryMutation.isError ? (
             <ErrorState
               title="Scan Failed"
-              message="The scanner encountered an error. Please check your conditions and try again."
+              message={queryMutation.error?.message || "The scanner encountered an error. Please check your conditions and try again."}
               onRetry={runScan}
             />
           ) : results.length > 0 ? (
@@ -956,18 +905,26 @@ export default function ScannerPage() {
                 sorting={sorting}
                 onSortingChange={setSorting}
                 manualSorting={true}
-                isFetching={scanMutation.isPending || queryMutation.isPending || scannerLoading}
+                storeHook={useColumnLTDStore}
+                isFetching={queryMutation.isPending}
               />
               <Pagination
                 currentPage={currentPage}
-                totalItems={results.length}
+                totalItems={totalMatched}
+                maxItems={5000}
                 pageSize={pageSize}
                 onPageChange={setCurrentPage}
-                onPageSizeChange={() => {}}
+                onPageSizeChange={() => { }}
               />
             </>
-          ) : scanMutation.isPending || queryMutation.isPending || scannerLoading ? (
-            <SkeletonTable rows={6} cols={6} />
+          ) : queryMutation.isPending ? (
+            <SkeletonTable rows={10} cols={8} />
+          ) : hasRun && results.length === 0 ? (
+            <EmptyState
+              icon={ScanSearch}
+              title="No stocks matched"
+              message="Try adjusting your filters or selecting a different preset."
+            />
           ) : hasRun ? (
             <EmptyState
               icon={ScanSearch}

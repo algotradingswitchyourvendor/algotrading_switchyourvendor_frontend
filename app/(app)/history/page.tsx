@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useRef, useMemo, useEffect } from "react";
+import { FeatureGate } from "@/components/common/FeatureGate";
+import { useEntitlements } from "@/hooks/use-entitlements";
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import type { SortingState } from "@tanstack/react-table";
 import { motion } from "framer-motion";
@@ -60,6 +62,23 @@ function LabeledInput({
 }
 
 export default function HistoryPage() {
+  return (
+    <FeatureGate
+      feature="history"
+      featureLabel="Historical Data"
+      requiredPlan="FREE"
+      returnTo="/history"
+      redirect={true}
+    >
+      <HistoryPageContent />
+    </FeatureGate>
+  );
+}
+
+function HistoryPageContent() {
+  const { getLimit, canAccess } = useEntitlements();
+  const historyDays = getLimit("history_days");
+
   const [selectedDate, setSelectedDate] = useState("today");
   const [searchSymbol, setSearchSymbol] = useState("");
   const [startTime, setStartTime] = useState("");
@@ -133,6 +152,12 @@ export default function HistoryPage() {
   const allData: StockRecord[] = historyQuery.data || [];
 
   const handleDownloadCSV = () => {
+    if (!canAccess("csv_export")) {
+      alert("CSV Export requires the PRO plan. Please upgrade to use this feature.");
+      window.location.href = "/settings?tab=plans&feature=csv_export&returnTo=/history";
+      return;
+    }
+
     tableRef.current?.downloadCSV(
       `marketpulse_history_${appliedFilters.date}.csv`
     );
@@ -182,7 +207,6 @@ export default function HistoryPage() {
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.2 }}
-        className="app-content"
         style={{ padding: "var(--sp-6)" }}
       >
         <div style={{ display: "flex", flexDirection: "column", gap: "var(--sp-5)" }}>
@@ -208,25 +232,32 @@ export default function HistoryPage() {
                   alignItems: "flex-end",
                   gap: "var(--sp-4)",
                   overflowX: "auto", // allow scrolling within filters if too narrow
-                  paddingBottom: 8,
+                  paddingBottom: 16,
                 }}
               >
                 {/* Date */}
-                <LabeledInput label="Trading Date" icon={Calendar}>
-                  <select
-                    className="select"
-                    value={selectedDate}
-                    onChange={(e) => setSelectedDate(e.target.value)}
-                    style={{ height: 36, width: 160 }}
-                  >
-                    <option value="today">Today</option>
-                    {datesQuery.data?.map((date) => (
-                      <option key={date} value={date}>
-                        {date}
-                      </option>
-                    ))}
-                  </select>
-                </LabeledInput>
+                <div style={{ display: "flex", flexDirection: "column", gap: 2, position: "relative" }}>
+                  <LabeledInput label="Trading Date" icon={Calendar}>
+                    <select
+                      className="select"
+                      value={selectedDate}
+                      onChange={(e) => setSelectedDate(e.target.value)}
+                      style={{ height: 36, width: 160 }}
+                    >
+                      <option value="today">Today</option>
+                      {datesQuery.data?.map((date) => (
+                        <option key={date} value={date}>
+                          {date}
+                        </option>
+                      ))}
+                    </select>
+                  </LabeledInput>
+                  {historyDays !== -1 && (
+                    <span style={{ fontSize: 9, color: "var(--color-accent)", paddingLeft: 2, position: "absolute", top: "100%", left: 0, marginTop: 4, whiteSpace: "nowrap" }}>
+                      Max {historyDays} days history
+                    </span>
+                  )}
+                </div>
 
                 {/* Symbol */}
                 <LabeledInput label="Symbol" icon={Search}>
@@ -283,7 +314,7 @@ export default function HistoryPage() {
                   alignItems: "center",
                   gap: "var(--sp-2)",
                   marginLeft: "auto",
-                  paddingBottom: 8,
+                  paddingBottom: 16,
                   flexShrink: 0,
                 }}
               >

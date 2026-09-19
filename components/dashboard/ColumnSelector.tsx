@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useColumnStore } from "@/stores/columns";
+import { useEntitlements } from "@/hooks/use-entitlements";
 import {
   Columns3,
   X,
@@ -59,6 +60,10 @@ export function ColumnSelector({
   const selectGroup = (group: string) => onGroupToggle ? onGroupToggle(group, false) : store.selectGroup(group);
   const deselectGroup = (group: string) => onGroupToggle ? onGroupToggle(group, true) : store.deselectGroup(group);
   const resetToDefaults = onReset || store.resetToDefaults;
+  
+  const { getLimit } = useEntitlements();
+  const maxColumns = getLimit("max_columns");
+
   const [isOpen, setIsOpen] = useState(false);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(
     new Set(groups)
@@ -98,6 +103,28 @@ export function ColumnSelector({
     return selected.length > 0 && selected.length < groupCols.length;
   };
 
+  const handleToggleColumn = (col: string) => {
+    // Check if we are selecting a new column (not currently visible)
+    if (!visibleColumns.includes(col)) {
+      if (maxColumns !== -1 && visibleColumns.length >= maxColumns) {
+        alert(`You can only select up to ${maxColumns} columns on your current plan.`);
+        return;
+      }
+    }
+    toggleColumn(col);
+  };
+
+  const handleSelectGroup = (group: string) => {
+    const groupCols = filteredMetadata.filter((m) => m.group === group);
+    const newColsCount = groupCols.filter((m) => !visibleColumns.includes(m.column)).length;
+    
+    if (maxColumns !== -1 && visibleColumns.length + newColsCount > maxColumns) {
+      alert(`Selecting this group would exceed your plan limit of ${maxColumns} columns.`);
+      return;
+    }
+    selectGroup(group);
+  };
+
   if (!metadata.length) return null;
 
 
@@ -110,7 +137,7 @@ export function ColumnSelector({
         onClick={() => setIsOpen(true)}
       >
         <Columns3 size={14} />
-        Columns ({visibleColumns.length})
+        Columns ({visibleColumns.length}{maxColumns !== -1 ? `/${maxColumns}` : ""})
       </button>
 
       {/* Drawer */}
@@ -144,7 +171,7 @@ export function ColumnSelector({
                     color: "var(--text-primary)",
                   }}
                 >
-                  Columns
+                  Columns {maxColumns !== -1 && <span style={{fontSize: 11, color: "var(--color-accent)", marginLeft: 8}}>{visibleColumns.length}/{maxColumns}</span>}
                 </span>
                 <div
                   style={{
@@ -276,7 +303,7 @@ export function ColumnSelector({
                           onClick={(e) => {
                             e.stopPropagation();
                             if (isFull) deselectGroup(group);
-                            else selectGroup(group);
+                            else handleSelectGroup(group);
                           }}
                           style={{
                             width: 16,
@@ -339,7 +366,7 @@ export function ColumnSelector({
                                   e.currentTarget.style.backgroundColor =
                                     "transparent";
                                 }}
-                                onClick={() => toggleColumn(col.column)}
+                                onClick={() => handleToggleColumn(col.column)}
                               >
                                 <div
                                   style={{

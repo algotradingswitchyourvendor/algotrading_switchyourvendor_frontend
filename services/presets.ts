@@ -1,5 +1,6 @@
 import { ScannerPreset, ScannerCondition, UnifiedQueryRequest } from "@/types/scanner";
 import { API_BASE_URL } from "@/constants/api";
+import { ApiError } from "./api";
 
 export interface PresetCreatePayload {
   name: string;
@@ -46,7 +47,7 @@ export async function fetchUserPresets(scannerType?: string): Promise<UserPreset
     url.searchParams.append("scanner_type", scannerType);
   }
   
-  const res = await fetch(url.toString());
+  const res = await fetch(url.toString(), { credentials: "include" });
   if (!res.ok) {
     throw new Error("Failed to fetch user presets");
   }
@@ -58,14 +59,29 @@ export async function createPreset(payload: PresetCreatePayload): Promise<UserPr
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
+    credentials: "include",
   });
   
-  const data = await res.json();
+  const data = await res.json().catch(() => null);
   if (!res.ok) {
     if (res.status === 409) {
       throw { status: 409, data };
     }
-    throw new Error(data.detail || "Failed to create preset");
+    
+    const detail = data?.detail || data?.error || {};
+    let code = detail?.code || data?.error?.code || "NETWORK_ERROR";
+    let msg = detail?.message || data?.error?.message || `Request failed with status ${res.status}`;
+    
+    if (typeof data?.detail === "string") {
+      if (data.detail === "PRESET_LIMIT_REACHED") code = "PRESET_LIMIT_REACHED";
+      msg = data.detail;
+    }
+
+    throw new ApiError(msg, code, res.status, {
+      feature: detail?.feature,
+      required_plan: detail?.required_plan,
+      current_plan: detail?.current_plan,
+    });
   }
   return data;
 }
@@ -75,17 +91,33 @@ export async function updatePreset(id: string, payload: PresetUpdatePayload): Pr
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
+    credentials: "include",
   });
   
+  const data = await res.json().catch(() => null);
   if (!res.ok) {
-    throw new Error("Failed to update preset");
+    const detail = data?.detail || data?.error || {};
+    let code = detail?.code || data?.error?.code || "NETWORK_ERROR";
+    let msg = detail?.message || data?.error?.message || `Request failed with status ${res.status}`;
+    
+    if (typeof data?.detail === "string") {
+      if (data.detail === "PRESET_LIMIT_REACHED") code = "PRESET_LIMIT_REACHED";
+      msg = data.detail;
+    }
+
+    throw new ApiError(msg, code, res.status, {
+      feature: detail?.feature,
+      required_plan: detail?.required_plan,
+      current_plan: detail?.current_plan,
+    });
   }
-  return res.json();
+  return data;
 }
 
 export async function deletePreset(id: string): Promise<void> {
   const res = await fetch(`${API_BASE_URL}/presets/${id}`, {
     method: "DELETE",
+    credentials: "include",
   });
   if (!res.ok) {
     throw new Error("Failed to delete preset");
@@ -95,6 +127,7 @@ export async function deletePreset(id: string): Promise<void> {
 export async function usePresetApi(id: string): Promise<UserPreset> {
   const res = await fetch(`${API_BASE_URL}/presets/${id}/use`, {
     method: "POST",
+    credentials: "include",
   });
   if (!res.ok) {
     throw new Error("Failed to mark preset as used");
