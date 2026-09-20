@@ -2,11 +2,10 @@
  * Auth Zustand store.
  *
  * Holds the authenticated user, loading state, and auth actions.
- * The session cookie (mp_session) is managed by the backend — this store
- * is purely for UI state and does NOT control security.
+ * The real session cookie (mp_session) is managed by the backend.
  *
- * Usage:
- *   const { user, isAuthenticated, isLoading } = useAuthStore();
+ * mp_authenticated is ONLY a frontend route-protection hint for
+ * Next.js middleware. It contains no authentication token or user data.
  */
 
 import { create } from "zustand";
@@ -29,14 +28,19 @@ interface AuthState {
   isAuthenticated: boolean;
   isLoading: boolean;
 
-  /** Fetch current user from /auth/me — call on app mount */
   fetchUser: () => Promise<void>;
-
-  /** Log out — clears session cookie via backend, then resets state */
   logout: () => Promise<void>;
-
-  /** Set user directly (after OAuth callback) */
   setUser: (user: AuthUser | null) => void;
+}
+
+const AUTH_HINT_COOKIE = "mp_authenticated";
+
+function setAuthHint() {
+  document.cookie = `${AUTH_HINT_COOKIE}=true; Path=/; SameSite=Lax`;
+}
+
+function clearAuthHint() {
+  document.cookie = `${AUTH_HINT_COOKIE}=; Path=/; Max-Age=0; SameSite=Lax`;
 }
 
 export const useAuthStore = create<AuthState>((set) => ({
@@ -46,23 +50,49 @@ export const useAuthStore = create<AuthState>((set) => ({
 
   fetchUser: async () => {
     set({ isLoading: true });
+
     try {
       const res = await fetch(ENDPOINTS.AUTH_ME, {
         credentials: "include",
       });
+
       if (!res.ok) {
-        set({ user: null, isAuthenticated: false, isLoading: false });
+        clearAuthHint();
+
+        set({
+          user: null,
+          isAuthenticated: false,
+          isLoading: false,
+        });
+
         return;
       }
+
       const json = await res.json();
       const user: AuthUser | null = json?.data ?? null;
+
+      const authenticated =
+        user !== null && user.status === "ACTIVE";
+
+      if (authenticated) {
+        setAuthHint();
+      } else {
+        clearAuthHint();
+      }
+
       set({
         user,
-        isAuthenticated: user !== null && user.status === "ACTIVE",
+        isAuthenticated: authenticated,
         isLoading: false,
       });
     } catch {
-      set({ user: null, isAuthenticated: false, isLoading: false });
+      clearAuthHint();
+
+      set({
+        user: null,
+        isAuthenticated: false,
+        isLoading: false,
+      });
     }
   },
 
@@ -73,16 +103,33 @@ export const useAuthStore = create<AuthState>((set) => ({
         credentials: "include",
       });
     } catch {
-      // If request fails, still clear local state
+      // Session cleanup continues locally even if backend request fails.
     }
+
+    clearAuthHint();
+
     useSubscriptionStore.getState().reset();
-    set({ user: null, isAuthenticated: false, isLoading: false });
+
+    set({
+      user: null,
+      isAuthenticated: false,
+      isLoading: false,
+    });
   },
 
   setUser: (user) => {
+    const authenticated =
+      user !== null && user.status === "ACTIVE";
+
+    if (authenticated) {
+      setAuthHint();
+    } else {
+      clearAuthHint();
+    }
+
     set({
       user,
-      isAuthenticated: user !== null && user.status === "ACTIVE",
+      isAuthenticated: authenticated,
       isLoading: false,
     });
   },
