@@ -1,1 +1,1 @@
-export const APP_URL = "https://app.marketpulse.in";
+export const APP_URL = "https://algotrading-switchyourvendor-fronte.vercel.app/dashboard";
