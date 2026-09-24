@@ -1,4 +1,5 @@
 import { APP_URL } from "@/config/landingAppConfig";
+import Link from "next/link";
 
 const PRODUCT_LINKS = [
   { label: "Dashboard", href: APP_URL },
@@ -44,6 +45,29 @@ export default function Footer() {
                 <li>NSE · BSE</li>
                 <li>09:15 – 15:30 IST</li>
                 <li>UTC +05:30</li>
+              </ul>
+            </div>
+            <div>
+              <p className="font-mono text-[10px] tracking-[0.26em] text-muted-foreground">LEGAL</p>
+              <ul className="mt-4 space-y-2.5">
+                <li>
+                  <Link
+                    href="/privacy"
+                    data-testid="footer-link-privacy"
+                    className="text-sm text-secondary-foreground transition-colors duration-200 hover:text-foreground"
+                  >
+                    Privacy Policy
+                  </Link>
+                </li>
+                <li>
+                  <Link
+                    href="/terms"
+                    data-testid="footer-link-terms"
+                    className="text-sm text-secondary-foreground transition-colors duration-200 hover:text-foreground"
+                  >
+                    Terms of Service
+                  </Link>
+                </li>
               </ul>
             </div>
           </nav>
